@@ -53,40 +53,47 @@ environment separation, and standard GitHub workflow conventions.
 ```bash
 git clone https://github.com/AndyStarGitHub/back-end
 cd be-1
+```
 
 2️⃣ Create and activate virtual environment
 
 Windows (PowerShell):
 
+```bash
 python -m venv venv
 venv\Scripts\activate
 python -m pip install --upgrade pip
-
+```
 
 Linux/macOS:
 
+```bash
 python3 -m venv venv
 source venv/bin/activate
 python -m pip install --upgrade pip
+```
 
 3️⃣ Install dependencies
+```bash
 pip install -r requirements.txt
+```
 
 4️⃣ Configure environment variables
 
 Create a .env file in the project root (use .env.sample as a reference):
-
+```bash
 APP_NAME=FastAPI Best Practice
 ENV=dev
 DEBUG=True
 LOG_LEVEL=DEBUG
 SECRET_KEY=change_me_locally
-
+```
 ▶️ Running the Application
 
 Run the FastAPI app locally:
-
+```bash
 uvicorn app.main:app --reload
+```
 
 Health check: http://127.0.0.1:8000
 
@@ -99,5 +106,31 @@ Example response:
 }
 
 🧪 Running Tests
-
+```
 pytest -q
+```
+
+## 🐳 Run with Docker
+
+### Build
+```bash
+docker build -t be1-api:0.1.2 .
+```
+
+Run (with .env)
+```bash
+docker run --rm -it -p 8000:8000 --env-file .env be1-api:0.1.2
+```
+
+Endpoints
+
+Swagger: http://127.0.0.1:8000/docs
+
+Health: GET /healthz
+
+CORS
+
+Set allowed origins via .env:
+```bash
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
