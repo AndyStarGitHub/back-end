@@ -117,20 +117,44 @@ pytest -q
 docker build -t be1-api:0.1.2 .
 ```
 
-Run (with .env)
+### Run (with .env)
 ```bash
 docker run --rm -it -p 8000:8000 --env-file .env be1-api:0.1.2
 ```
 
-Endpoints
+### Endpoints
 
 Swagger: http://127.0.0.1:8000/docs
 
 Health: GET /healthz
 
-CORS
+### CORS
 
 Set allowed origins via .env:
 ```bash
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
+
+## Run with Docker Compose (API + Postgres + Redis)
+
+### 1) Configure .env
+```bash
+POSTGRES_DB=appdb
+POSTGRES_USER=appuser
+POSTGRES_PASSWORD=apppass
+DATABASE_URL=postgresql+asyncpg://appuser:apppass@db:5432/appdb
+REDIS_URL=redis://redis:6379/0
+```
+
+
+### 2) Start stack
+```bash
+docker compose up --build
+# or: docker compose up -d --build
+```
+
+### 3) Test connections
+
+Swagger: http://127.0.0.1:8000/docs
+DB: GET /ping/db → {"postgres_ok": true}
+Redis: GET /ping/redis → {"redis_ok": true}

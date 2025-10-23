@@ -1,6 +1,9 @@
 fastapi
 uvicorn[standard]
 pydantic-settings
+SQLAlchemy>=2.0
+asyncpg
+redis>=5.0
 
 pytest
 pytest-asyncio
