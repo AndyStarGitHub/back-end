@@ -1,9 +1,18 @@
 from functools import lru_cache
+from typing import List
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import json
 
 
 class Settings(BaseSettings):
     APP_NAME: str = "FastAPI Best Practice"
+
+    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])
+
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    RELOAD: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -11,6 +20,18 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def _parse_cors(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return ["*"]
+            if v.startswith("["):
+                return json.loads(v)
+            return [s.strip() for s in v.split(",") if s.strip()]
+        return v
 
 
 @lru_cache
