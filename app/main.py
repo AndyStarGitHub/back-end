@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from app.routers.health import router as health_router
 from app.routers.ping import router as ping_router
 
+
 from app.core.config import settings
 from app.services.redis_client import close_redis
 
@@ -23,6 +24,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 app.include_router(health_router)
 app.include_router(ping_router)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.RELOAD
+    )

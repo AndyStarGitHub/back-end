@@ -135,26 +135,84 @@ Set allowed origins via .env:
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
-## Run with Docker Compose (API + Postgres + Redis)
+### 🐳 Run the Application with Docker Compose
 
-### 1) Configure .env
-```bash
+This project uses Docker Compose to run the FastAPI application together with PostgreSQL and Redis.
+
+🧩 Services Overview
+Service	Description	Port
+api	FastAPI backend (main application)	8000
+db	PostgreSQL database	5432 (internal)
+redis	Redis in-memory data store	6379 (internal)
+⚙️ Environment Variables
+
+Make sure your .env file contains the following values:
+
+APP_NAME=FastAPI Best Practice
+
+# CORS (Frontend URLs)
+CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+
+# PostgreSQL
 POSTGRES_DB=appdb
 POSTGRES_USER=appuser
 POSTGRES_PASSWORD=apppass
 DATABASE_URL=postgresql+asyncpg://appuser:apppass@db:5432/appdb
+
+# Redis
 REDIS_URL=redis://redis:6379/0
-```
+
+# App runtime
+HOST=0.0.0.0
+PORT=8000
+RELOAD=false
 
 
-### 2) Start stack
+🔐 Never commit your real .env file.
+Instead, update .env.sample for reference.
+
+🚀 Run the Stack
+
+Build and start all services:
 ```bash
 docker compose up --build
-# or: docker compose up -d --build
 ```
 
-### 3) Test connections
+Run in the background (detached mode):
+```bash
+docker compose up -d --build
+```
 
-Swagger: http://127.0.0.1:8000/docs
-DB: GET /ping/db → {"postgres_ok": true}
-Redis: GET /ping/redis → {"redis_ok": true}
+Stop all containers:
+```bash
+docker compose down
+```
+
+Rebuild without cache (e.g. after start.sh or dependency changes):
+```bash
+docker compose build --no-cache
+```
+
+✅ Health Checks
+
+Once the containers are running:
+
+Endpoint	Description	Example Response
+GET /	Base healthcheck	{"status_code":200,"detail":"ok","result":"working"}
+GET /ping/db	PostgreSQL connectivity	{"postgres_ok":true}
+GET /ping/redis	Redis connectivity	{"redis_ok":true}
+
+Swagger UI → http://127.0.0.1:8000/docs
+
+🧠 Notes
+
+Code changes in the app directory trigger auto-reload inside the container (thanks to the volumes mount).
+
+If port 5432 or 8000 is already used on your host, change the left side in docker-compose.yml, for example:
+
+ports:
+  - "8001:8000"
+  - "5433:5432"
+
+
+Redis is currently used only for connectivity tests, but will later serve as a cache, session store, or task queue backend.

@@ -24,6 +24,12 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])
 
+    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])
+
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    RELOAD: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
