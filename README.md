@@ -216,3 +216,48 @@ ports:
 
 
 Redis is currently used only for connectivity tests, but will later serve as a cache, session store, or task queue backend.
+
+# Database Migrations Setup
+
+## 1. Environment Setup
+
+Add your database connection string to the `.env` file (with real user and password):
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/mydb
+```
+
+> Use `host=db` when running inside Docker, or `host=localhost` for local development.
+
+---
+
+## 2. Initialize Alembic
+
+If migrations are not yet initialized, run:
+```bash
+docker compose run --rm --entrypoint "" api alembic init -t async migrations
+```
+---
+
+## 3. Configure Alembic
+
+Edit `migrations/env.py` to ensure the following:
+- Import your SQLAlchemy `Base` and model modules:
+- Load the database URL from environment variables (`os.getenv("DATABASE_URL")`).
+- Keep `compare_type=True` to detect column type changes.
+---
+
+## 4. Generate Migrations
+
+To generate a new migration automatically based on your models:
+```bash
+docker compose run --rm --entrypoint "" api alembic revision --autogenerate -m "create users table"
+```
+---
+
+## 5. Apply Migrations
+
+To apply all pending migrations to the database:
+```bash
+docker compose run --rm --entrypoint "" api alembic upgrade head
+```
+---
