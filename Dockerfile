@@ -11,7 +11,9 @@ RUN python -m pip install --upgrade pip && pip install --no-cache-dir -r require
 COPY app ./app
 COPY .env.sample ./.env.sample
 COPY start.sh /app/start.sh
-RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
+RUN sed -i 's/\r$//' /app/start.sh \
+ && sed -i '1s/^\xEF\xBB\xBF//' /app/start.sh \
+ && chmod +x /app/start.sh
 
 RUN chown -R appuser:appuser /app
 USER appuser
@@ -19,3 +21,4 @@ USER appuser
 EXPOSE 8000
 
 ENTRYPOINT ["/bin/sh", "/app/start.sh"]
+CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000","--reload"]
