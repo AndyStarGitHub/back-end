@@ -1,0 +1,24 @@
+repos:
+  # ruff (lint + autofix дрібних речей)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]     # дозволяємо автофікси (whitespace, unused imports тощо)
+
+  # isort (сортування імпортів, узгоджено з black)
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        additional_dependencies: []
+        # isort читає налаштування з pyproject.toml
+
+  # black (форматування коду)
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+
+# Можна додати глобальні виключення (опційно)
+# files: \.(py|pyi)$

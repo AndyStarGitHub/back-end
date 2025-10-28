@@ -1,14 +1,14 @@
+import json
 from functools import lru_cache
-from typing import List
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import json
 
 
 class Settings(BaseSettings):
     APP_NAME: str = "FastAPI Best Practice"
 
-    CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["*"])
+    CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["*"])
 
     HOST: str = "0.0.0.0"
     PORT: int = 8000
