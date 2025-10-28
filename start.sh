@@ -1,6 +1,7 @@
-﻿#!/bin/sh
-set -eu
+#!/usr/bin/env bash
+set -e
 
-# TODO: alembic upgrade head  # (РєРѕР»Рё Р·'СЏРІР»СЏС‚СЊСЃСЏ РјС–РіСЂР°С†С–С—)
+: "${LOG_DIR:=/app/logs}"
+mkdir -p "$LOG_DIR"
 
-exec python -m app.main
+exec "$@"
