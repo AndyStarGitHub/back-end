@@ -1,24 +1,22 @@
-from typing import AsyncGenerator
+from app.core.config import db_settings
 from sqlalchemy.ext.asyncio import (
-    AsyncSession,
     create_async_engine,
-    async_sessionmaker
+    async_sessionmaker,
+    AsyncSession
 )
-from app.core.config import settings
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
+    db_settings.ASYNC_DATABASE_URL,   # <-- ось так правильно
+    echo=False, pool_pre_ping=True
 )
-SessionLocal = async_sessionmaker(
+
+async_session = async_sessionmaker(
     bind=engine,
-    class_=AsyncSession,
     expire_on_commit=False,
-    autoflush=False,
+    class_=AsyncSession
 )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with SessionLocal() as session:
+async def get_db() -> AsyncSession:
+    async with async_session() as session:
         yield session

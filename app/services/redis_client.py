@@ -1,19 +1,25 @@
+from __future__ import annotations
 from typing import Optional
-from redis.asyncio import Redis
-from app.core.config import settings
+from redis.asyncio import Redis, ConnectionPool
+from app.core.config import redis_settings
 
-_redis: Optional[Redis] = None
+_pool: Optional[ConnectionPool] = None
+
+
+def _get_pool() -> ConnectionPool:
+    global _pool
+    if _pool is None:
+        _pool = ConnectionPool.from_url(
+            redis_settings.URL,
+            decode_responses=True,
+            health_check_interval=30,
+            max_connections=20,
+        )
+    return _pool
 
 
 async def get_redis() -> Redis:
-    global _redis
-    if _redis is None:
-        _redis = Redis.from_url(
-            settings.REDIS_URL,
-            encoding="utf-8",
-            decode_responses=True
-        )
-    return _redis
+    return Redis(connection_pool=_get_pool())
 
 
 async def close_redis() -> None:
