@@ -1,7 +1,12 @@
 from __future__ import annotations
 import json
 from typing import List, Literal
-from pydantic import Field, SecretStr, computed_field, field_validator
+from pydantic import (
+    Field,
+    SecretStr,
+    computed_field,
+    field_validator
+)
 from pydantic_settings import BaseSettings
 
 

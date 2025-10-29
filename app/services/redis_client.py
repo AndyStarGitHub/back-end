@@ -2,6 +2,7 @@ from typing import Optional
 from redis.asyncio import Redis, ConnectionPool
 from app.core.config import settings
 
+
 _pool: Optional[ConnectionPool] = None
 
 
