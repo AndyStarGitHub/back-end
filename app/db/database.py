@@ -7,11 +7,9 @@ from typing import AsyncIterator
 from app.core.config import settings
 
 
-engine = create_async_engine(
-    settings.ASYNC_DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True
-)
+ASYNC_DATABASE_URL = settings.db.ASYNC_DATABASE_URL
+
+engine = create_async_engine(ASYNC_DATABASE_URL, echo=False, future=True)
 
 SessionLocal = async_sessionmaker(
     bind=engine,

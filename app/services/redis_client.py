@@ -10,7 +10,7 @@ def _get_pool() -> ConnectionPool:
     global _pool
     if _pool is None:
         _pool = ConnectionPool.from_url(
-            settings.REDIS_URL,
+            settings.redis.URL,
             decode_responses=True,
             health_check_interval=30,
             max_connections=20,
