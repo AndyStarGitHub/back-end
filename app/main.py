@@ -3,12 +3,10 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routers.health import router as health_router
-from app.routers.ping import router as ping_router
+from app.routers import api as api_router
 
 
 from app.core.config import settings
-from app.core.logging import setup_logging
 from app.services.redis_client import close_redis
 
 
@@ -17,29 +15,25 @@ async def lifespan(app: FastAPI):
     yield
     await close_redis()
 
-
-setup_logging()
-logging.info("Application is starting")
-app = FastAPI(title=settings.APP_NAME)
-logging.info("Application started")
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.app.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(health_router)
-app.include_router(ping_router)
-
+app.include_router(api_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     import uvicorn
+    from app.core.config import settings
+
     uvicorn.run(
-        app,
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.RELOAD
+        "app.main:app",
+        host=settings.app.HOST,
+        port=settings.app.PORT,
+        reload=settings.app.RELOAD,
     )

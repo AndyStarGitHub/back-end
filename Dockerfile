@@ -14,8 +14,6 @@ COPY start.sh /app/start.sh
 RUN sed -i 's/\r$//' /app/start.sh \
  && sed -i '1s/^\xEF\xBB\xBF//' /app/start.sh \
  && chmod +x /app/start.sh
-ENTRYPOINT ["/bin/sh", "/app/start.sh"]
-
 
 RUN chown -R appuser:appuser /app
 USER appuser

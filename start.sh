@@ -1,6 +1,5 @@
-﻿#!/bin/sh
-set -eu
+#!/usr/bin/env bash
 
-# TODO: alembic upgrade head  # (РєРѕР»Рё Р·'СЏРІР»СЏС‚СЊСЃСЏ РјС–РіСЂР°С†С–С—)
+set -e
 
 exec python -m app.main

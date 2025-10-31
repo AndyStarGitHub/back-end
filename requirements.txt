@@ -1,13 +1,10 @@
-fastapi
-uvicorn[standard]
-pydantic-settings
-pydantic>=2
-SQLAlchemy>=2.0
-asyncpg
-redis>=5.0
-alembic>=1.13
-python-dotenv
+fastapi==0.119.1
+uvicorn[standard]==0.30.6
+pydantic-settings==2.11.0
+SQLAlchemy==2.0.44
+asyncpg==0.30.0
+redis==7.0.0
 
-pytest
-pytest-asyncio
-httpx
+pytest==8.4.2
+pytest-asyncio==1.2.0
+httpx==0.28.1
