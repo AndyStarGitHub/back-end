@@ -1,8 +1,9 @@
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, func
+from sqlalchemy import String, Boolean, DateTime, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
+from app.utils.utils import now_kyiv
 
 
 class User(Base):
@@ -24,6 +25,12 @@ class User(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False
+        nullable=False,
+        default=now_kyiv,
     )
+
+
+@event.listens_for(User, "before_insert")
+def _ensure_created_at(mapper, connection, target):
+    if target.created_at is None or target.created_at.tzinfo is None:
+        target.created_at = now_kyiv()
