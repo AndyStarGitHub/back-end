@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_current_identity
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import LoginInput, TokenOut
@@ -50,6 +50,11 @@ async def _current_user(request: Request, db: AsyncSession) -> User:
     return u
 
 
-@router.get("/me", response_model=UserOut, summary="Current user profile (by token)")
-async def read_me(current_user = Depends(get_current_user)):
-    return current_user
+@router.get("/me")
+async def me(identity = Depends(get_current_identity)):
+    # На цьому етапі ми вже верифікували або локальний, або Auth0 токен
+    return {
+        "email": identity["email"],
+        "auth_source": identity["source"],
+        "claims": identity["payload"],  # опційно, для дебагу
+    }

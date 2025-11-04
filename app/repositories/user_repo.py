@@ -81,3 +81,11 @@ async def delete_user(db: AsyncSession, user_id: int) -> bool:
     res = await db.execute(delete(User).where(User.id == user_id))
     await db.commit()
     return (res.rowcount or 0) > 0
+
+
+async def create_from_email(db: AsyncSession, email: str) -> User:
+    user = User(email=email, hashed_password="")  # або якось позначай «внешний» акаунт
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user

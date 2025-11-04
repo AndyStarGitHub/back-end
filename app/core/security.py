@@ -6,15 +6,21 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt_sha256", "bcrypt"],   # нові паролі йдуть в bcrypt_sha256, старі bcrypt ще читаємо
+    deprecated="auto",
+    bcrypt__truncate_error=False,          # НЕ падати на >72 байти для legacy bcrypt
+)
 
 
 def hash_password(plain: str) -> str:
     return pwd_context.hash(plain)
 
-
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    # verify_and_update: якщо хеш застарілий (bcrypt), поверне new_hash для перевидачі
+    ok, new_hash = pwd_context.verify_and_update(plain, hashed)
+    # Поверни булеве — оновлення (rehash) зробимо на рівні роутера, якщо потрібно
+    return ok
 
 
 def create_access_token(sub: str, extra: Optional[dict[str, Any]] = None) -> str:
