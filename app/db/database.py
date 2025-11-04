@@ -29,8 +29,3 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 class Base(DeclarativeBase):
     pass
-
-
-async def get_session() -> AsyncIterator[AsyncSession]:
-    async with async_session() as session:
-        yield session
