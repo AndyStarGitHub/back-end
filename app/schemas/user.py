@@ -26,7 +26,6 @@ class SignInRequest(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = Field(default=None, min_length=6)
 
 
 class UsersListResponse(BaseModel):
