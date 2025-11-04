@@ -9,7 +9,3 @@ SQLAlchemy==2.0.44
 asyncpg==0.30.0
 passlib==1.7.4
 redis==7.0.0
-
-pytest==8.4.2
-pytest-asyncio==1.2.0
-httpx==0.28.1
