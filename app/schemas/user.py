@@ -34,7 +34,6 @@ class UserOut(BaseModel):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=kyiv)
         else:
-            # нормалізуємо у Київ (на випадок, якщо це був UTC)
             dt = dt.astimezone(kyiv)
         return dt.isoformat()
 
@@ -53,7 +52,6 @@ class SignInRequest(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = Field(default=None, min_length=6)
 
 
 class UsersListResponse(BaseModel):

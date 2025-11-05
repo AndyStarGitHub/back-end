@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import exc as sa_exc
 import logging
 
-from app.db.database import get_session, get_db
+from app.db.database import get_db
 from app.core.security import hash_password
 from app.repositories.user_repo import list_users, get_by_email, create
 from app.schemas.common import PaginatedResponse
@@ -57,7 +57,7 @@ async def get_users(
 @router.get("/{user_id}", response_model=UserOut)
 async def get_user(
         user_id: int,
-        db: AsyncSession = Depends(get_session)
+        db: AsyncSession = Depends(get_db)
 ):
     us = await user_repo.get_by_id(db, user_id)
     if not us:
@@ -75,7 +75,7 @@ async def get_user(
 )
 async def create_user(
         payload: UserCreate,
-        db: AsyncSession = Depends(get_session)
+        db: AsyncSession = Depends(get_db)
 ):
     if await get_by_email(db, payload.email):
         raise HTTPException(
@@ -90,7 +90,7 @@ async def create_user(
 async def update_user(
         user_id: int,
         payload: UserUpdate,
-        db: AsyncSession = Depends(get_session)
+        db: AsyncSession = Depends(get_db)
 ):
     hashed = hash_password(payload.password) if payload.password else None
     try:
@@ -124,7 +124,7 @@ async def update_user(
 )
 async def delete_user(
         user_id: int,
-        db: AsyncSession = Depends(get_session)
+        db: AsyncSession = Depends(get_db)
 ):
     try:
         ok = await user_repo.delete_user(db, user_id)
