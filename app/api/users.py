@@ -1,13 +1,22 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    status
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import exc as sa_exc
 import logging
 
 from app.db.database import get_db
-from app.core.security import hash_password
-from app.repositories.user_repo import list_users, get_by_email, create
+from app.repositories.user_repo import (
+    list_users,
+    get_by_email,
+    create
+)
 from app.schemas.common import PaginatedResponse
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.repositories import user_repo
@@ -88,34 +97,29 @@ async def create_user(
 
 @router.patch("/{user_id}", response_model=UserOut)
 async def update_user(
-        user_id: int,
-        payload: UserUpdate,
-        db: AsyncSession = Depends(get_db)
+    user_id: int,
+    payload: UserUpdate,
+    db: AsyncSession = Depends(get_db),
 ):
-    hashed = hash_password(payload.password) if payload.password else None
+    updates = payload.model_dump(exclude_unset=True, exclude_none=True)
+
+    updates.pop("password", None)
+    updates.pop("hashed_password", None)
+
     try:
-        us = await user_repo.patch_user(
-            db, user_id,
-            full_name=payload.full_name,
-            is_active=payload.is_active,
-            hashed_password=hashed
-        )
+        if not updates:
+            us = await user_repo.get_user(db, user_id)
+        else:
+            us = await user_repo.patch_user(db, user_id, **updates)
+
         if not us:
-            raise HTTPException(
-                status_code=404,
-                detail="User not found"
-            )
-        log.info("User updated id=%s", user_id)
+            raise HTTPException(status_code=404, detail="User not found")
+
+        log.info("User updated id=%s with %s", user_id, list(updates.keys()))
         return UserOut.model_validate(us.__dict__)
     except sa_exc.SQLAlchemyError as e:
-        log.exception(
-            "Failed to update user id=%s: %s",
-            user_id, e
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to update user"
-        )
+        log.exception("Failed to update user id=%s: %s", user_id, e)
+        raise HTTPException(status_code=500, detail="Failed to update user")
 
 
 @router.delete(

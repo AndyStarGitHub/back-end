@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
-from app.db.database import Base, get_db, get_session
+from app.db.database import Base, get_db
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ async def client(db_session: AsyncSession):
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_db] = override_get_session
 
     transport = ASGITransport(app=app)
     async with AsyncClient(

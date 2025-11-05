@@ -1,4 +1,4 @@
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Any
 
 from pydantic import EmailStr
 from sqlalchemy import select, update, delete, func
@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.models.user import User
 from app.schemas.user import UserCreate
+
+
+ALLOWED_UPDATE_FIELDS = {"full_name", "is_active", "hashed_password"}
 
 
 async def get_by_id(db: AsyncSession, user_id: int) -> Optional[User]:
@@ -59,22 +62,28 @@ async def create(db: AsyncSession, payload: UserCreate) -> User:
 
 
 async def patch_user(
-        db: AsyncSession,
-        user_id: int,
-        *,
-        full_name: str | None,
-        is_active: bool | None,
-        hashed_password: str | None
-) -> Optional[User]:
-    values = {}
-    if full_name is not None: values["full_name"] = full_name
-    if is_active is not None: values["is_active"] = is_active
-    if hashed_password is not None: values["hashed_password"] = hashed_password
-    if not values:
-        return await get_by_id(db, user_id)
-    await db.execute(update(User).where(User.id == user_id).values(**values))
+    db: AsyncSession,
+    user_id: int,
+    **fields: Any,
+) -> User | None:
+
+    data = {k: v for k, v in fields.items()
+            if k in ALLOWED_UPDATE_FIELDS and v is not None}
+
+    if not data:
+        res = await db.execute(select(User).where(User.id == user_id))
+        return res.scalar_one_or_none()
+
+    stmt = (
+        update(User)
+        .where(User.id == user_id)
+        .values(**data)
+        .returning(User)
+    )
+    res = await db.execute(stmt)
     await db.commit()
-    return await get_by_id(db, user_id)
+    return res.scalar_one_or_none()
+
 
 
 async def delete_user(db: AsyncSession, user_id: int) -> bool:
