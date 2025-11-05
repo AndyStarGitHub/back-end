@@ -1,0 +1,51 @@
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+exclude = """
+(
+  ^/migrations/|
+  ^/migrations/versions/|
+  ^/venv/|
+  ^/.venv/|
+  ^/node_modules/|
+  ^/dist/|
+  ^/build/
+)
+"""
+
+[tool.isort]
+profile = "black"
+line_length = 88
+py_version = 312
+skip = ["venv", ".venv", "node_modules", "dist", "build"]
+# Якщо є папка з автогенерованими міграціями:
+skip_glob = ["migrations/**", "migrations/versions/**"]
+
+[tool.ruff]
+# ruff працює дуже швидко і може замінити частину flake8 + isort (але ми лишаємо isort окремо, як просив ментор)
+line-length = 88
+target-version = "py312"
+exclude = [
+  "venv", ".venv", "node_modules", "dist", "build",
+  "migrations", "migrations/versions"
+]
+
+# Увімкнути найуживаніші правила
+lint.select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort checks (для дубля контролю)
+  "UP", # pyupgrade
+  "B",  # bugbear (обережно: корисно)
+  "SIM" # simplify
+]
+
+# Те, що часто заважає на початку — вимикаємо (потім можна ввімкнути)
+lint.ignore = [
+  "E501",   # довгі рядки (поки що довіряємо black)
+  "SIM115", # прикрі вимоги до відкриття файлів/with — за бажанням
+]
+
+[tool.ruff.format]
+# Форматер ruff вимкнений; формат робить black
+docstring-code-format = false

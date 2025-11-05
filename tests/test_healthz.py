@@ -3,11 +3,11 @@ import os
 from typing import Any
 
 import pytest
-from httpx import AsyncClient, ASGITransport
 from fastapi import status
+from httpx import ASGITransport, AsyncClient
 
-from app.main import app
 from app.core import config as config_module
+from app.main import app
 
 
 @pytest.mark.asyncio
@@ -35,7 +35,7 @@ async def test_settings_reads_app_name_from_env(monkeypatch: Any) -> None:
 
     importlib.reload(config_module)
 
-    assert config_module.settings.APP_NAME == test_value
+    assert test_value == config_module.settings.APP_NAME
 
     if old is not None:
         monkeypatch.setenv("APP_NAME", old)
