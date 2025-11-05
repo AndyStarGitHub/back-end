@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -5,6 +7,7 @@ from app.routers import api as api_router
 
 
 from app.core.config import settings
+from app.core.logging import setup_logging
 from app.services.redis_client import close_redis
 
 
