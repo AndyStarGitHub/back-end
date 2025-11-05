@@ -1,4 +1,5 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
+
 set -e
 
-python -m app.main
+exec python -m app.main
