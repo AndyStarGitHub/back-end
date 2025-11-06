@@ -53,9 +53,3 @@ class User(IdMixin, TimestampedMixin, Base):
         default=True,
         nullable=False
     )
-
-
-@event.listens_for(User, "before_insert")
-def _ensure_created_at(mapper, connection, target):
-    if target.created_at is None or target.created_at.tzinfo is None:
-        target.created_at = now_kyiv()

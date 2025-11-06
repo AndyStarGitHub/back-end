@@ -11,88 +11,58 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import exc as sa_exc
 import logging
 
+from app.core.errors import NotFound, Conflict
 from app.db.database import get_db
-from app.repositories.user_repo import (
-    list_users,
-    get_by_email,
-    create
-)
-from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserCreate, UserUpdate, UserOut
-from app.repositories import user_repo
 
+from app.schemas.user import (
+    UserCreate,
+    UserUpdate,
+    UserOut,
+    UsersListResponse,
+    UserDetailResponse
+)
+from app.repositories import user_repo
+from app.services import user_service
 
 log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get(
-    "",
-    response_model=PaginatedResponse[UserOut],
-    summary="Отримати список користувачів з пагінацією",
-)
-async def get_users(
+@router.get("", response_model=UsersListResponse)
+async def list_users(
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(
-        10,
-        ge=1,
-        le=100,
-        description="Скільки записів повернути"
-    ),
-    offset: int = Query(
-        0,
-        ge=0,
-        description="Зсув від початку вибірки"
-    ),
-    search: Optional[str] = Query(
-        None,
-        description="Опційний пошук по email/full_name"
-    ),
 ):
-    total, items = await list_users(
+    total, items = await user_service.list_users(
         db,
         limit=limit,
-        offset=offset,
-        search=search
+        offset=offset
     )
-    return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "items": items,
-    }
+    return UsersListResponse(
+        total=total,
+        limit=limit,
+        offset=offset,
+        items=[UserOut.model_validate(u.__dict__) for u in items],
+    )
 
 
-@router.get("/{user_id}", response_model=UserOut)
-async def get_user(
-        user_id: int,
-        db: AsyncSession = Depends(get_db)
-):
-    us = await user_repo.get_by_id(db, user_id)
-    if not us:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-    return UserOut.model_validate(us.__dict__)
+@router.get("/{user_id}", response_model=UserDetailResponse)
+async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    try:
+        user = await user_service.get_user(db, user_id)
+        return UserDetailResponse.model_validate(user.__dict__)
+    except NotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post(
-    "",
-    response_model=UserOut,
-    status_code=201
-)
-async def create_user(
-        payload: UserCreate,
-        db: AsyncSession = Depends(get_db)
-):
-    if await get_by_email(db, payload.email):
-        raise HTTPException(
-            status_code=400,
-            detail="Email already registered"
-        )
-    user_obj = await create(db, payload)
-    return UserOut.model_validate(user_obj)
+@router.post("", response_model=UserDetailResponse, status_code=201)
+async def create_user(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+    try:
+        user = await user_service.create_user(db, payload)
+        return UserDetailResponse.model_validate(user.__dict__)
+    except Conflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.patch("/{user_id}", response_model=UserOut)
@@ -101,25 +71,11 @@ async def update_user(
     payload: UserUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    updates = payload.model_dump(exclude_unset=True, exclude_none=True)
-
-    updates.pop("password", None)
-    updates.pop("hashed_password", None)
-
     try:
-        if not updates:
-            us = await user_repo.get_user(db, user_id)
-        else:
-            us = await user_repo.patch_user(db, user_id, **updates)
-
-        if not us:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        log.info("User updated id=%s with %s", user_id, list(updates.keys()))
-        return UserOut.model_validate(us.__dict__)
-    except sa_exc.SQLAlchemyError as e:
-        log.exception("Failed to update user id=%s: %s", user_id, e)
-        raise HTTPException(status_code=500, detail="Failed to update user")
+        user = await user_service.update_user(db, user_id, payload)
+        return UserOut.model_validate(user.__dict__)
+    except NotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.delete(

@@ -4,9 +4,7 @@ from pydantic import EmailStr
 from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import hash_password
 from app.models.user import User
-from app.schemas.user import UserCreate
 
 
 ALLOWED_UPDATE_FIELDS = {"full_name", "is_active", "hashed_password"}
@@ -48,11 +46,17 @@ async def list_users(
     return total, items
 
 
-async def create(db: AsyncSession, payload: UserCreate) -> User:
+async def create(
+    db: AsyncSession,
+    *,
+    email: EmailStr,
+    full_name: str | None,
+    hashed_password: str,
+) -> User:
     user = User(
-        email=payload.email,
-        full_name=payload.full_name,
-        hashed_password=hash_password(payload.password),
+        email=email,
+        full_name=full_name,
+        hashed_password=hashed_password,
         is_active=True,
     )
     db.add(user)
@@ -83,7 +87,6 @@ async def patch_user(
     res = await db.execute(stmt)
     await db.commit()
     return res.scalar_one_or_none()
-
 
 
 async def delete_user(db: AsyncSession, user_id: int) -> bool:

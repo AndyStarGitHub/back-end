@@ -61,11 +61,7 @@ async def client(db_session: AsyncSession):
     async def override_get_db():
         yield db_session
 
-    async def override_get_session():
-        yield db_session
-
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_db] = override_get_session
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -84,17 +80,27 @@ def stub_password_hash(monkeypatch):
         return f"hashed::{pw}"
 
     import app.core.security as security
-    import app.repositories.user_repo as user_repo
+    monkeypatch.setattr(security, "hash_password", fake_hash, raising=True)
 
-    monkeypatch.setattr(
-        security,
-        "hash_password",
-        fake_hash,
-        raising=True
-    )
-    monkeypatch.setattr(
-        user_repo,
-        "hash_password",
-        fake_hash,
-        raising=True
-    )
+    try:
+        import app.services.user_service as user_service
+        monkeypatch.setattr(
+            user_service,
+            "hash_password",
+            fake_hash,
+            raising=False
+        )
+    except Exception:
+        pass
+
+    try:
+        import app.repositories.user_repo as user_repo
+        if hasattr(user_repo, "hash_password"):
+            monkeypatch.setattr(
+                user_repo,
+                "hash_password",
+                fake_hash,
+                raising=True
+            )
+    except Exception:
+        pass
