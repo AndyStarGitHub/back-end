@@ -20,11 +20,12 @@ class SecuritySettings(BaseSettings):
 
 
 class Auth0Settings(BaseSettings):
-    DOMAIN: str
-    AUDIENCE: str
-    ISSUER: str
-    EMAIL_CLAIM: str = "https://be-1-api/email"
-    ALG: str = "RS256"
+    AUTH0_DOMAIN: str
+    AUTH0_AUDIENCE: str
+    AUTH0_ISSUER: str
+    AUTH0_EMAIL_CLAIM: str = "https://be-1-api/email"
+    AUTH0_ALG: str = "RS256"
+    AUTH0_JWKS_CACHE_SECONDS: int = 600
 
 
 class Settings(BaseSettings):
