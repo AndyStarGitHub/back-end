@@ -52,7 +52,6 @@ async def get_user_by_id(
         raise HTTPException(status_code=500, detail="Failed to fetch user")
 
 
-
 @router.post(
     "",
     response_model=UserDetailResponse,
