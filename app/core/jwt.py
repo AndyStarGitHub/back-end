@@ -10,7 +10,11 @@ JWT_ISS = os.getenv("JWT_ISS", "local")
 JWT_EXPIRES_MIN = int(os.getenv("JWT_EXPIRES_MIN", "60"))
 
 
-def create_access_token(*, sub: str, email: str | None = None, extra: dict | None = None) -> str:
+def create_access_token(
+        *, sub: str,
+        email: str | None = None,
+        extra: dict | None = None
+) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "iss": JWT_ISS,

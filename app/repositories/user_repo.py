@@ -58,6 +58,19 @@ async def create(db: AsyncSession, payload: UserCreate) -> User:
     return user
 
 
+async def create_from_auth0(db: AsyncSession, email: str) -> User:
+    user = User(
+        email=email,
+        full_name="",
+        hashed_password="",
+        is_active=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 async def patch_user(
         db: AsyncSession,
         user_id: int,
@@ -84,7 +97,7 @@ async def delete_user(db: AsyncSession, user_id: int) -> bool:
 
 
 async def create_from_email(db: AsyncSession, email: str) -> User:
-    user = User(email=email, hashed_password="")  # або якось позначай «внешний» акаунт
+    user = User(email=email, hashed_password="")
     db.add(user)
     await db.commit()
     await db.refresh(user)
