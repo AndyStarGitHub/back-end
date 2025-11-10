@@ -3,12 +3,15 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routers import api as api_router
 
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.errors import NotFound, Conflict
 from app.core.logging import setup_logging
 from app.services.redis_client import close_redis
+from app.routers import api_router
 
 
 @asynccontextmanager
@@ -16,7 +19,11 @@ async def lifespan(app: FastAPI):
     yield
     await close_redis()
 
+
+setup_logging()
 app = FastAPI()
+app.include_router(api_router)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,7 +33,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(api_router, prefix="/api/v1")
+
+@app.exception_handler(NotFound)
+async def not_found_handler(request: Request, exc: NotFound):
+    return JSONResponse(
+        status_code=404,
+        content={"detail": str(exc) or "Not found"}
+    )
+
+
+@app.exception_handler(Conflict)
+async def conflict_handler(request: Request, exc: Conflict):
+    return JSONResponse(
+        status_code=409,
+        content={"detail": str(exc) or "Conflict"}
+    )
 
 if __name__ == "__main__":
     import uvicorn
