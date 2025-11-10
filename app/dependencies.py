@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth0 import verify_auth0_token
 from app.core.config import settings
 from app.db.database import get_db
-from app.repositories.user_repo import get_by_email, create_from_email
+from app.repositories.user_repo import user_repo
+
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -41,8 +42,8 @@ async def get_current_user_auth0(
             detail="Email claim not found in token"
         )
 
-    user = await get_by_email(db, email)
+    user = await user_repo.get_by_email(db, email)
     if user is None:
-        user = await create_from_email(db, email)
+        user = await user_repo.create_from_email(db, email)
 
     return user

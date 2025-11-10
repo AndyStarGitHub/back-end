@@ -4,11 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_identity
 from app.db.database import get_db
 from app.models.user import User
+from app.repositories import user_repo
 from app.schemas.auth import LoginInput, TokenOut
-from app.repositories.user_repo import get_by_email
 from app.core.security import verify_password, decode_token
 from app.core.jwt import create_access_token
-from app.repositories.user_repo import get_by_id
+from app.repositories.user_repo import user_repo
+
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ router = APIRouter()
     summary="Login with email & password"
 )
 async def login(payload: LoginInput, db: AsyncSession = Depends(get_db)):
-    user = await get_by_email(db, payload.email)
+    user = await user_repo.get_by_email(db, payload.email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -66,7 +67,7 @@ async def _current_user(request: Request, db: AsyncSession) -> User:
             detail="Invalid token payload"
         )
 
-    u = await get_by_id(db, int(user_id))
+    u = await user_repo.get_by_id(db, int(user_id))
     if not u:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

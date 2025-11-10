@@ -15,13 +15,12 @@ class UserRepository(BaseRepository[User]):
         res = await db.execute(select(User).where(User.email == email))
         return res.scalars().first()
 
+    async def create_from_email(self, db: AsyncSession, email: str) -> User:
+        user = User(email=email, hashed_password="")
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return user
+
 
 user_repo = UserRepository()
-
-
-async def create_from_email(db: AsyncSession, email: str) -> User:
-    user = User(email=email, hashed_password="")
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user

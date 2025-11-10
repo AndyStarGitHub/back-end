@@ -8,8 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth0 import verify_auth0_token, extract_email
 from app.db.database import get_db
 from app.dependencies import bearer
-from app.repositories import user_repo
-from app.repositories.user_repo import get_by_id
+from app.repositories.user_repo import user_repo
 from app.core.jwt import decode_local_token, TokenDecodeError
 
 
@@ -43,7 +42,7 @@ async def get_current_user_local(
             detail="Invalid token payload"
         )
 
-    user = await get_by_id(db, int(user_id))
+    user = await user_repo.get_by_id(db, int(user_id))
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -83,7 +82,10 @@ async def get_current_user_auth0(
     db: AsyncSession = Depends(get_db),
 ):
     if not creds or creds.scheme.lower() != "bearer":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
 
     payload = verify_auth0_token(creds.credentials)
     email = extract_email(payload)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypeVar, Generic, Type, Sequence, Tuple, Optional, Any
+from typing import TypeVar, Generic, Type, Tuple, Optional, Any
 from sqlalchemy import select, update, delete, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,3 +82,7 @@ class BaseRepository(Generic[T]):
         )
         items = list(result.scalars().all())
         return total, items
+
+    async def get_one_by(self, db: AsyncSession, **filters) -> Optional[T]:
+        res = await db.execute(select(self.model).filter_by(**filters))
+        return res.scalars().first()

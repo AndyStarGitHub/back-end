@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound, Conflict
