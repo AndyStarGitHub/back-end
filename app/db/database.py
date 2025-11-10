@@ -7,8 +7,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
-from typing import AsyncGenerator
-
+from typing import AsyncGenerator, AsyncIterator
 
 engine = create_async_engine(
     settings.db.ASYNC_DATABASE_URL,
@@ -29,8 +28,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 class Base(DeclarativeBase):
     pass
-
-
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_maker() as session:
-        yield session

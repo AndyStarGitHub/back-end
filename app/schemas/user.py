@@ -5,11 +5,8 @@ from pydantic import (
     EmailStr,
     Field,
     ConfigDict,
-    field_serializer
 )
 from typing import List, Optional
-
-from zoneinfo import ZoneInfo
 
 
 class UserBase(BaseModel):
@@ -23,20 +20,9 @@ class UserOut(BaseModel):
     email: str
     full_name: str | None = None
     created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-    @field_serializer("created_at")
-    def _serialize_created_at(self, dt: datetime, _info):
-        if dt is None:
-            return None
-        kyiv = ZoneInfo("Europe/Kyiv")
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=kyiv)
-        else:
-            # нормалізуємо у Київ (на випадок, якщо це був UTC)
-            dt = dt.astimezone(kyiv)
-        return dt.isoformat()
 
 
 class UserCreate(BaseModel):
@@ -53,7 +39,6 @@ class SignInRequest(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = Field(default=None, min_length=6)
 
 
 class UsersListResponse(BaseModel):

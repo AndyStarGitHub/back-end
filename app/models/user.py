@@ -1,15 +1,16 @@
-from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, event
+from sqlalchemy import (
+    String,
+    Boolean,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
-from app.utils.utils import now_kyiv
+from app.models.mixins import IdMixin, TimestampedMixin
 
 
-class User(Base):
+class User(IdMixin, TimestampedMixin, Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(
         String(255),
         unique=True,
@@ -23,14 +24,3 @@ class User(Base):
         default=True,
         nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=now_kyiv,
-    )
-
-
-@event.listens_for(User, "before_insert")
-def _ensure_created_at(mapper, connection, target):
-    if target.created_at is None or target.created_at.tzinfo is None:
-        target.created_at = now_kyiv()

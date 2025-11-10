@@ -4,12 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
 from app.core.config import settings
+from app.core.errors import NotFound, Conflict
 from app.core.logging import setup_logging
 from app.services.redis_client import close_redis
-# from app.routers.health import router as health_router
-# from app.routers.ping import router as ping_router
-# from app.api.users import router as users_router
 from app.routers import api_router
 
 
@@ -32,6 +33,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(NotFound)
+async def not_found_handler(request: Request, exc: NotFound):
+    return JSONResponse(
+        status_code=404,
+        content={"detail": str(exc) or "Not found"}
+    )
+
+
+@app.exception_handler(Conflict)
+async def conflict_handler(request: Request, exc: Conflict):
+    return JSONResponse(
+        status_code=409,
+        content={"detail": str(exc) or "Conflict"}
+    )
 
 if __name__ == "__main__":
     import uvicorn
