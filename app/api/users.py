@@ -7,15 +7,22 @@ from fastapi import (
 from sqlalchemy import exc as sa_exc
 import logging
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import Response
+
+from app.core.deps import get_current_identity
+from app.db.database import get_db
+from app.dependencies import get_current_user_auth0
+from app.models import User
 from app.schemas.user import (
     UserCreate,
     UserUpdate,
     UserOut,
     UsersListResponse,
-    UserDetailResponse
+    UserDetailResponse, UserSelfUpdate, UserPasswordChange
 )
 
-from app.services.deps import get_user_service
+from app.services.deps import get_user_service, user_service_dep
 from app.services.user_service import UserService
 
 
@@ -87,17 +94,57 @@ async def update_user(
         raise HTTPException(status_code=500, detail="Failed to update user")
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
+# @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+# async def delete_user(
+#     user_id: int,
+#     svc: UserService = Depends(get_user_service)
+# ):
+#     try:
+#         ok = await svc.delete_user(user_id)
+#         if not ok:
+#             raise HTTPException(status_code=404, detail="User not found")
+#         log.info("User deleted id=%s", user_id)
+#         return
+#     except sa_exc.SQLAlchemyError as exc:
+#         log.exception("Failed to delete user id=%s: %s", user_id, exc)
+#         raise HTTPException(status_code=500, detail="Failed to delete user")
+#
+#
+# @router.patch("/{user_id}", response_model=UserOut, dependencies=[Depends(get_current_identity)])
+# async def update_self(
+#     user_id: int,
+#     payload: UserSelfUpdate,
+#     db: AsyncSession = Depends(get_db),
+#     current_user: User = Depends(get_current_user_auth0),
+#     svc: UserService = Depends(user_service_dep),
+# ):
+#
+#     user = await svc.self_update_profile(user_id, payload.full_name)
+#     return user
+
+
+@router.patch("/{user_id}/password", status_code=204, dependencies=[Depends(get_current_identity)])
+async def change_password(
     user_id: int,
-    svc: UserService = Depends(get_user_service)
+    payload: UserPasswordChange,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_auth0),
+    svc: UserService = Depends(user_service_dep),
 ):
-    try:
-        ok = await svc.delete_user(user_id)
-        if not ok:
-            raise HTTPException(status_code=404, detail="User not found")
-        log.info("User deleted id=%s", user_id)
-        return
-    except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to delete user id=%s: %s", user_id, exc)
-        raise HTTPException(status_code=500, detail="Failed to delete user")
+    await svc.self_change_password(user_id, payload.new_password)
+    return Response(status_code=204)
+
+
+@router.delete("/{user_id}", status_code=204, dependencies=[Depends(get_current_identity)])
+async def delete_self(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_auth0),
+    svc: UserService = Depends(user_service_dep),
+):
+    ok = await svc.self_delete(user_id)
+    if not ok:
+        # якщо користувача не існує — можна 404
+        raise HTTPException(status_code=404, detail="User not found")
+    return Response(status_code=204)
+

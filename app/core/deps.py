@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth0 import verify_auth0_token, extract_email
 from app.db.database import get_db
 from app.dependencies import bearer
+from app.models import User
 from app.repositories.user_repo import user_repo
 from app.core.jwt import decode_local_token, TokenDecodeError
+from app.services.auth_service import AuthService
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -138,3 +140,31 @@ async def get_current_user_email(
             detail="Email claim not found"
         )
     return email
+
+async def optional_current_user_dep(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """
+    Повертає User або None. Ніколи не підіймає 401.
+    Використовується там, де логіка дозволяє анонімний доступ, але сервісу зручно знати користувача, якщо він є.
+    """
+    try:
+        # якщо токена нема — просто None
+        if creds is None or creds.scheme.lower() != "bearer":
+            return None
+
+        claims = verify_auth0_token(creds.credentials)
+        email = extract_email(claims)
+        if not email:
+            return None
+
+        user = await user_repo.get_by_email(db, email)
+        return user
+    except Exception:
+        # будь-які проблеми з токеном — мовчки повертаємо None (бо опційно)
+        return None
+
+
+def auth_service_dep(db: AsyncSession = Depends(get_db)) -> AuthService:
+    return AuthService(db=db)
