@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth0 import verify_auth0_token, extract_email
+from app.core.errors import NotAuthenticated, TokenInvalid, NotFound
+from app.core.security import decode_token
 from app.db.database import get_db
 from app.dependencies import bearer
 from app.models import User
@@ -60,15 +62,18 @@ async def get_current_user_local(
     return user
 
 
+
+
 async def get_current_identity(
-    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> Dict[str, Any]:
-    if creds.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid auth scheme"
-        )
-    payload = verify_auth0_token(creds.credentials)
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+):
+    if creds is None or creds.scheme.lower() != "bearer":
+        raise NotAuthenticated("Missing bearer token")
+    token = creds.credentials
+    try:
+        payload = decode_token(token)
+    except Exception:
+        raise TokenInvalid("Invalid token")
     return payload
 
 
@@ -168,3 +173,16 @@ async def optional_current_user_dep(
 
 def auth_service_dep(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(db=db)
+
+
+async def get_current_user(
+    identity: dict = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = identity.get("sub")
+    if not user_id:
+        raise TokenInvalid("Invalid token payload")
+    user = await user_repo.get_by_id(db, int(user_id))
+    if not user:
+        raise NotFound("User not found")
+    return user

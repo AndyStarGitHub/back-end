@@ -28,3 +28,32 @@ class InvalidCredentials(AuthError):
 
 class InactiveUser(AuthError):
     pass
+
+
+class AppError(Exception):
+    pass
+
+
+class NotAuthenticated(AppError):
+    pass
+
+
+class InvalidCredentials(AppError):
+    pass
+
+
+class TokenInvalid(AppError):
+    pass
+
+
+class Forbidden(AppError):
+    pass
+
+
+class NotFound(AppError):
+    pass
+
+
+class Conflict(AppError):
+    pass
+

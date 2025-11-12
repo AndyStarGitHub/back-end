@@ -13,8 +13,8 @@ class AuthService:
 
     async def login_with_password(self, *, email: str, password: str) -> dict:
         user: User | None = await user_repo.get_by_email(self.db, email)
-        if not user:
-            raise InvalidCredentials()
+        if not user or not verify_password(password, user.hashed_password):
+            raise InvalidCredentials("Invalid credentials")
 
         if getattr(user, "is_active", True) is False:
             raise InactiveUser()

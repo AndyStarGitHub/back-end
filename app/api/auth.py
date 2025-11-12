@@ -2,44 +2,53 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_identity, auth_service_dep
+from app.core.deps import get_current_identity, auth_service_dep, get_current_user
 from app.core.errors import InvalidCredentials, InactiveUser
+from app.db.database import get_db
 from app.models.user import User
 from app.repositories import user_repo
 from app.core.security import decode_token
 from app.repositories.user_repo import user_repo
+from app.schemas.auth import TokenResponse, LoginRequest
 from app.schemas.user import UserOut
 from app.services.auth_service import AuthService
 
 router = APIRouter()
 
 
-router = APIRouter()
+def auth_service_dep(db: AsyncSession = Depends(get_db)) -> AuthService:
+    return AuthService(db=db)
 
 class SignInPayload(BaseModel):
     email: EmailStr
     password: str
 
-@router.post("/login")
-async def login(payload: SignInPayload, svc: AuthService = Depends(auth_service_dep)):
-    try:
-        result = await svc.login_with_password(email=payload.email, password=payload.password)
-        # бажано серіалізувати user через схему
-        return {
-            "access_token": result["access_token"],
-            "token_type": "bearer",
-            "user": UserOut.model_validate(result["user"]),
-        }
-    except InvalidCredentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
-        )
-    except InactiveUser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is inactive"
-        )
+
+@router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+async def login(payload: LoginRequest, svc: AuthService = Depends(auth_service_dep)):
+    # якщо креди невалідні — з сервісу полетить InvalidCredentials -> автоматом 401
+    return await svc.login_with_password(email=payload.email, password=payload.password)
+
+# @router.post("/login")
+# async def login(payload: SignInPayload, svc: AuthService = Depends(auth_service_dep)):
+#     try:
+#         result = await svc.login_with_password(email=payload.email, password=payload.password)
+#         # бажано серіалізувати user через схему
+#         return {
+#             "access_token": result["access_token"],
+#             "token_type": "bearer",
+#             "user": UserOut.model_validate(result["user"]),
+#         }
+#     except InvalidCredentials:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Invalid credentials"
+#         )
+#     except InactiveUser:
+#         raise HTTPException(
+#             status_code=status.HTTP_403_FORBIDDEN,
+#             detail="User is inactive"
+#         )
 
 
 
@@ -76,10 +85,6 @@ async def _current_user(request: Request, db: AsyncSession) -> User:
     return u
 
 
-@router.get("/me")
-async def me(identity = Depends(get_current_identity)):
-    return {
-        "email": identity["email"],
-        "auth_source": identity["source"],
-        "claims": identity["payload"],
-    }
+@router.get("/me", response_model=UserOut)
+async def me(user = Depends(get_current_user)):
+    return user
