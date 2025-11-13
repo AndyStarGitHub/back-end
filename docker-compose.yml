@@ -42,7 +42,7 @@ services:
       - "8000:8000"
     volumes:
       - ./:/app:cached
-      - ./logs:/app/logs
+      - ./local_logs:/app/log
 
 volumes:
   pgdata:

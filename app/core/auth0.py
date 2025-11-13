@@ -1,177 +1,69 @@
-from __future__ import annotations
-
-import json
-import logging
+from loguru import logger
 from functools import lru_cache
-from typing import Any, Dict, Optional
-from datetime import datetime, timedelta, timezone
+from urllib.parse import urljoin
 
-import httpx
-
-from fastapi import HTTPException, status
 import jwt
-from jwt import PyJWKClient, InvalidTokenError
-from jwt.algorithms import RSAAlgorithm
 
-from app.core.config import settings
+try:
+    from jwt import PyJWKClient  # PyJWT 2.x
+except ImportError:               # деякі старі оточення
+    from jwt.jwks_client import PyJWKClient
 
 
-_JWKS: Optional[Dict[str, Any]] = None
-_JWKS_EXPIRES_AT: Optional[datetime] = None
+from app.core.config import settings  # звідки ти читаєш AUTH0_* значення
 
-JWKS_URL = f"https://{settings.auth0.DOMAIN}/.well-known/jwks.json"
-logging.info(F"JWKS_URL ={JWKS_URL}")
-ISSUER = settings.auth0.ISSUER
-logging.info(F"ISSUER ={ISSUER}")
-AUDIENCE = settings.auth0.AUDIENCE
-logging.info(F"AUDIENCE ={AUDIENCE}")
+
+
+
 
 
 def _jwks_url() -> str:
-    issuer = settings.auth0.ISSUER
-    if not issuer.endswith("/"):
-        issuer += "/"
-    return f"{issuer}.well-known/jwks.json"
-
-
-def get_jwks(force: bool = False) -> Dict[str, Any]:
-    global _JWKS, _JWKS_EXPIRES_AT
-
-    now = datetime.now(tz=timezone.utc)
-    if (not force) and _JWKS is not None and _JWKS_EXPIRES_AT and now < _JWKS_EXPIRES_AT:
-        return _JWKS
-
-    url = _jwks_url()
-    timeout = httpx.Timeout(5.0, connect=5.0)
-    try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception:
-        if _JWKS is not None:
-            return _JWKS
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch JWKS"
-        )
-
-    if not isinstance(data, dict) or "keys" not in data:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Invalid JWKS payload"
-        )
-
-    _JWKS = data
-    ttl = max(30, int(settings.auth0.JWKS_CACHE_SECONDS or 600))
-    _JWKS_EXPIRES_AT = now + timedelta(seconds=ttl)
-    return _JWKS
-
-
-def _pick_jwk_for_token(token: str) -> Dict[str, Any]:
-    try:
-        header = jwt.get_unverified_header(token)
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token header"
-        )
-
-    kid = header.get("kid")
-    if not kid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing kid in token header"
-        )
-
-    jwks = get_jwks()
-    for key in jwks.get("keys", []):
-        if key.get("kid") == kid:
-            return key
-
-    jwks = get_jwks(force=True)
-    for key in jwks.get("keys", []):
-        if key.get("kid") == kid:
-            return key
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Signing key not found"
-    )
-
-
-def _public_key_from_jwk(jwk_dict: Dict[str, Any]):
-    try:
-        jwk_json = json.dumps(jwk_dict)
-        return jwt.algorithms.RSAAlgorithm.from_jwk(jwk_json)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid JWK"
-        )
-
-
-@lru_cache(maxsize=1)
-def _jwks_client_cached() -> PyJWKClient:
-    return PyJWKClient(JWKS_URL)
-
-
-def extract_email(payload: Dict[str, Any]) -> Optional[str]:
-    claim = settings.auth0.EMAIL_CLAIM
-    return payload.get("email") or payload.get(claim)
-
-
-@lru_cache(maxsize=1)
-def get_jwks_client() -> PyJWKClient:
-    return PyJWKClient(JWKS_URL)
+    """
+    Будуємо правильний JWKS URL з урахуванням слеша в кінці ISSUER.
+    Приклад: https://tenant.us.auth0.com/.well-known/jwks.json
+    """
+    issuer = settings.auth0.ISSUER  # має закінчуватись на "/"
+    logger.info("Issuer: %s", issuer)
+    # urljoin сам розрулить зайві/відсутні слеші
+    return urljoin(issuer, ".well-known/jwks.json")
 
 
 @lru_cache(maxsize=1)
 def _jwks_client() -> PyJWKClient:
-    return PyJWKClient(JWKS_URL)
-
-
-def _find_key_by_kid(jwks: dict, kid: str | None) -> dict | None:
-    if not jwks or "keys" not in jwks:
-        return None
-    for key in jwks["keys"]:
-        if key.get("kid") == kid:
-            return key
-    return None
+    url = getattr(settings.auth0, "JWKS_URL", None) or _jwks_url()
+    logger.info("Auth0 PyJWKClient init: {}", url)
+    return PyJWKClient(url)
 
 
 def verify_auth0_token(token: str) -> dict:
+    # необов'язково, але корисно для діагностики
     try:
-        header = jwt.get_unverified_header(token)
-    except InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token header"
-        )
+        unverified = jwt.get_unverified_header(token)
+        logger.info("AUTH0 token header: {}", (unverified.get("kid"), unverified.get("alg")))
+    except Exception as e:
+        logger.exception("Failed to parse JWT header: %s", e)
+        raise
 
-    kid = header.get("kid")
-    jwks = get_jwks()
-    key_dict = _find_key_by_kid(jwks, kid)
-    if not key_dict:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unknown key id (kid)"
-        )
+    logger.info(
+        "AUTH0 using: ISS=%s AUD=%s JWKS=%s",
+        settings.auth0.ISSUER,
+        settings.auth0.AUDIENCE,
+        getattr(settings.auth0, "JWKS_URL", None) or _jwks_url(),
+    )
 
-    public_key = RSAAlgorithm.from_jwk(json.dumps(key_dict))
-
-    try:
-        payload = jwt.decode(
-            token,
-            key=public_key,
-            algorithms=[settings.auth0.ALG],
-            audience=settings.auth0.AUDIENCE,
-            issuer=settings.auth0.ISSUER,
-        )
-    except InvalidTokenError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token verification failed: {e}"
-        )
-
+    signing_key = _jwks_client().get_signing_key_from_jwt(token).key
+    payload = jwt.decode(
+        token,
+        signing_key,
+        algorithms=["RS256"],
+        audience=settings.auth0.AUDIENCE,
+        issuer=settings.auth0.ISSUER,
+    )
+    logger.info("AUTH0 payload OK: sub=%s", payload.get("sub"))
     return payload
+
+
+def extract_email(payload: dict) -> str | None:
+    # шукаємо кастомний клейм або стандартний email
+    email_claim = getattr(settings.auth0, "EMAIL_CLAIM", None)
+    return payload.get(email_claim) or payload.get("email")

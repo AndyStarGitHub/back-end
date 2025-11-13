@@ -1,3 +1,4 @@
+from loguru import logger
 from typing import Dict, Any
 
 from fastapi import Depends, HTTPException, status
@@ -16,50 +17,10 @@ from app.core.jwt import decode_local_token, TokenDecodeError
 from app.services.auth_service import AuthService
 
 
-bearer_scheme = HTTPBearer(auto_error=False)
+
+bearer = HTTPBearer(auto_error=False)
 
 
-async def get_current_user_local(
-    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: AsyncSession = Depends(get_db),
-):
-    if not creds or not creds.scheme.lower() == "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
-        )
-
-    token = creds.credentials
-
-    try:
-        payload = decode_local_token(token)
-    except TokenDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
-        )
-
-    user = await user_repo.get_by_id(db, int(user_id))
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-
-    if getattr(user, "is_active", True) is False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is inactive"
-        )
-
-    return user
 
 
 
@@ -67,14 +28,52 @@ async def get_current_user_local(
 async def get_current_identity(
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
 ):
+    logger.info("get_current_identity: raw creds = {}", creds)
+
     if creds is None or creds.scheme.lower() != "bearer":
-        raise NotAuthenticated("Missing bearer token")
+        logger.warning("Missing or wrong scheme in Authorization header")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing bearer token"
+        )
+
     token = creds.credentials
+    logger.info("get_current_identity: got token (first 20 chars) = {}", token[:20])
+
     try:
-        payload = decode_token(token)
-    except Exception:
-        raise TokenInvalid("Invalid token")
-    return payload
+        claims = verify_auth0_token(token)
+        logger.info("get_current_identity: decoded claims keys = {}", list(claims.keys()))
+    except Exception as e:
+        logger.exception("Token verification failed: {}", e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+    return {
+        "email": extract_email(claims),
+        "source": "auth0",
+        "payload": claims,
+    }
+
+
+
+
+
+# async def get_current_identity(
+#     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+# ):
+#     logger.info("get_current_identity: raw creds = {}", creds)
+#     if creds is None or creds.scheme.lower() != "bearer":
+#         logger.warning("Missing or wrong scheme in Authorization header")
+#         raise NotAuthenticated("Missing bearer token")
+#     token = creds.credentials
+#     logger.info("get_current_identity: got token (first 20 chars) = {}", token[:20])
+#     try:
+#         payload = decode_token(token)
+#     except Exception:
+#         raise TokenInvalid("Invalid token")
+#     return payload
 
 
 class Principal(BaseModel):
@@ -104,35 +103,35 @@ async def get_current_user_auth0(
     return user
 
 
-async def get_current_principal(
-    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> Principal:
-    if not creds or creds.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token"
-        )
+# async def get_current_principal(
+#     creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+# ) -> Principal:
+#     if not creds or creds.scheme.lower() != "bearer":
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Missing bearer token"
+#         )
+#
+#     try:
+#         payload = verify_auth0_token(creds.credentials)
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Invalid token"
+#         )
+#
+#     return Principal(
+#         sub=payload.get("sub"),
+#         email=extract_email(payload),
+#         scope=payload.get("scope"),
+#         raw=payload,
+#     )
 
-    try:
-        payload = verify_auth0_token(creds.credentials)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
 
-    return Principal(
-        sub=payload.get("sub"),
-        email=extract_email(payload),
-        scope=payload.get("scope"),
-        raw=payload,
-    )
-
-
-async def require_auth(
-        _: Principal = Depends(get_current_principal)
-) -> None:
-    return None
+# async def require_auth(
+#         _: Principal = Depends(get_current_principal)
+# ) -> None:
+#     return None
 
 
 async def get_current_user_email(
@@ -185,4 +184,49 @@ async def get_current_user(
     user = await user_repo.get_by_id(db, int(user_id))
     if not user:
         raise NotFound("User not found")
+    return user
+
+
+async def get_current_user_auth0(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
+):
+    if creds is None or creds.scheme.lower() != "bearer":
+        logger.info("No credentials provided")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
+
+    logger.info("Auth header scheme=%s", getattr(creds, "scheme", None))
+
+    token = creds.credentials
+    logger.info("Got bearer token with length=%s", len(token) if token else 0)
+
+    try:
+        claims = verify_auth0_token(token)
+        logger.info("verify_auth0_token OK: sub=%s aud=%s iss=%s",
+                 claims.get("sub"), claims.get("aud"), claims.get("iss"))
+        return {
+            "source": "auth0",
+            "email": extract_email(claims),
+            "payload": claims,
+        }
+    except Exception as e:
+        # важливо: зловили і залогували ПЕРЕД тим як віддати 401
+        logger.exception("verify_auth0_token FAILED: %s", e)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+    payload = verify_auth0_token(creds.credentials)
+    email = extract_email(payload)
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email claim not found")
+
+    user = await user_repo.get_by_email(db, email)
+    if not user:
+        # автостворення лайт-юзера
+        user = await user_repo.create(
+            db,
+            email=email,
+            full_name=None,
+            hashed_password="",
+        )
     return user

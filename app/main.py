@@ -10,9 +10,13 @@ from starlette.responses import JSONResponse
 from app.core.config import settings
 from app.core.error_handlers import register_exception_handlers
 from app.core.errors import NotFound, Conflict
-from app.core.logging import setup_logging
 from app.services.redis_client import close_redis
 from app.routers import api_router
+
+from loguru import logger
+
+logger.add("log/meduzzen.log")
+logger.debug("That's it, beautiful and simple logging!")
 
 
 @asynccontextmanager
@@ -21,7 +25,20 @@ async def lifespan(app: FastAPI):
     await close_redis()
 
 
-setup_logging()
+# setup_logging()
+# app/main.py (на самому початку файлу, до створення app)
+# import logging, sys
+
+# logging.basicConfig(
+#     level=logging.INFO,  # або DEBUG
+#     format="%(levelname)s %(asctime)s %(name)s: %(message)s",
+#     stream=sys.stdout,
+# )
+
+# додатково, щоб наші логери точно не губилися
+# logging.getLogger("app").setLevel(logging.DEBUG)
+# logging.getLogger("app.auth").setLevel(logging.DEBUG)
+
 app = FastAPI()
 register_exception_handlers(app)
 app.include_router(api_router)

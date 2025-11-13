@@ -3,8 +3,6 @@ from .ping import router as ping_router
 from .health import router as health_router
 from app.api.users import router as users_router
 from app.api.auth import router as auth_router
-from app.api.auth0_me import router as auth0_me_router
-from app.api.auth0_touch import router as auth0_touch_router
 
 
 api_router = APIRouter(prefix="/api/v1")
@@ -29,15 +27,6 @@ api_router.include_router(
     prefix="/auth",
     tags=["auth"]
 )
-api_router.include_router(
-    auth0_me_router,
-    prefix="/auth0",
-    tags=["auth0"]
-)
-api_router.include_router(
-    auth0_touch_router,
-    prefix="/auth0",
-    tags=["auth0"]
-)
+
 
 __all__ = ["api_router"]
