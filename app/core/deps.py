@@ -9,12 +9,11 @@ from jwt import PyJWTError
 from jwt.exceptions import PyJWKClientError
 
 from app.core.auth0 import verify_auth0_token, extract_email
-from app.core.errors import TokenInvalid, NotFound
+from app.core.errors import TokenInvalid, NotFound, TokenDecodeError
 from app.db.database import get_db
 from app.models import User
 from app.repositories.user_repo import user_repo
-from app.services.auth_service import AuthService
-from app.core.jwt import decode_access_token, TokenDecodeError
+from app.services.auth_service import AuthService, decode_access_token
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -152,58 +151,68 @@ def auth_service_dep(db: AsyncSession = Depends(get_db)) -> AuthService:
 
 
 async def get_current_user(
-    identity: dict = Depends(get_current_identity),
+    identity = Depends(get_current_identity),
     db: AsyncSession = Depends(get_db),
-):
-    user_id = identity.get("sub")
-    if not user_id:
-        raise TokenInvalid("Invalid token payload")
-    user = await user_repo.get_by_id(db, int(user_id))
-    if not user:
-        raise NotFound("User not found")
-    return user
+) -> User:
+    """
+    Повертає поточного користувача з БД на основі identity
+    (якщо Auth0 — створює юзера за email, якщо його ще немає;
+     якщо local JWT — шукає користувача за sub).
+    """
+    email = identity.get("email")
+    source = identity.get("source")
+    payload = identity.get("payload") or {}
+
+    # Auth0: шукаємо / створюємо по email
+    if source == "auth0":
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Email is missing in Auth0 token",
+            )
+
+        user = await user_repo.get_by_email(db, email)
+        if not user:
+            # авто-створення користувача з Auth0
+            user = await user_repo.create_from_email(db, email=email)
+        return user
+
+    # local JWT: шукаємо по sub (id користувача)
+    if source == "local":
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid local token payload (no sub)",
+            )
+
+        try:
+            user_id = int(sub)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid local token subject",
+            )
+
+        user = await user_repo.get_by_id(db, user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
+
+        if getattr(user, "is_active", True) is False:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User inactive",
+            )
+
+        return user
+
+    # Якщо невідоме джерело
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Unknown auth source",
+    )
 
 
-# async def get_current_user_auth0(
-#     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
-#     db: AsyncSession = Depends(get_db),
-# ):
-#     if creds is None or creds.scheme.lower() != "bearer":
-#         logger.info("No credentials provided")
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
-#
-#     logger.info("Auth header scheme=%s", getattr(creds, "scheme", None))
-#
-#     token = creds.credentials
-#     logger.info("Got bearer token with length=%s", len(token) if token else 0)
-#
-#     try:
-#         claims = verify_auth0_token(token)
-#         logger.info("verify_auth0_token OK: sub=%s aud=%s iss=%s",
-#                  claims.get("sub"), claims.get("aud"), claims.get("iss"))
-#         return {
-#             "source": "auth0",
-#             "email": extract_email(claims),
-#             "payload": claims,
-#         }
-#     except Exception as e:
-#         # важливо: зловили і залогували ПЕРЕД тим як віддати 401
-#         logger.exception("verify_auth0_token FAILED: %s", e)
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-#
-#
-#     payload = verify_auth0_token(creds.credentials)
-#     email = extract_email(payload)
-#     if not email:
-#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email claim not found")
-#
-#     user = await user_repo.get_by_email(db, email)
-#     if not user:
-#         # автостворення лайт-юзера
-#         user = await user_repo.create(
-#             db,
-#             email=email,
-#             full_name=None,
-#             hashed_password="",
-#         )
-#     return user

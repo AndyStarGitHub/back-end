@@ -1,11 +1,28 @@
+from __future__ import annotations
+
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import jwt
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.jwt import decode_refresh_token, TokenDecodeError
+from app.core.config import settings
 from app.repositories.user_repo import user_repo
-from app.core.errors import InvalidCredentials, InactiveUser, AuthError, NotFound
-from app.core.security import verify_password, issue_tokens_for_user
+from app.core.errors import InvalidCredentials, InactiveUser, AuthError, NotFound, TokenDecodeError
+from app.core.security import verify_password
 from app.models.user import User
+
+
+JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
+JWT_ALG = os.getenv("JWT_ALG", "HS256")
+JWT_ISS = os.getenv("JWT_ISS", "local")
+JWT_EXPIRES_MIN = int(os.getenv("JWT_EXPIRES_MIN", "60"))
+
+JWT_REFRESH_SECRET = getattr(settings, "JWT_REFRESH_SECRET", None) or JWT_SECRET
+JWT_REFRESH_EXPIRES_DAYS = getattr(settings, "JWT_REFRESH_EXPIRES_DAYS", 7)
+JWT_REFRESH_ALG = JWT_ALG
 
 
 class AuthService:
@@ -50,3 +67,98 @@ class AuthService:
 
         # 3) видати нову пару токенів
         return issue_tokens_for_user(user)
+
+
+
+def create_access_token(*, sub: str, email: str, extra: dict | None = None) -> str:
+    # now = datetime.now(datetime.timezone.utc)
+    now = datetime.now(timezone.utc)
+    payload: dict = {
+        "iss": "local",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=JWT_EXPIRES_MIN)).timestamp()),
+        "sub": sub,
+        "email": email,
+        "type": "access",
+    }
+    if extra:
+        payload.update(extra)
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+    return token
+
+
+
+def decode_access_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.security.JWT_SECRET,
+            algorithms=[settings.security.JWT_ALG],
+        )
+    except jwt.PyJWTError as e:
+        raise TokenDecodeError(f"Invalid access token: {e}")
+
+    if payload.get("type") != "access":
+        raise TokenDecodeError("Not an access token")
+
+    return payload
+
+
+def decode_refresh_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.security.JWT_SECRET,
+            algorithms=[settings.security.JWT_ALG],
+        )
+    except jwt.PyJWTError as e:
+        raise TokenDecodeError(f"Invalid refresh token: {e}")
+
+    if payload.get("type") != "refresh":
+        raise TokenDecodeError("Not a refresh token")
+
+    return payload
+
+
+
+def create_refresh_token(*, sub: str) -> str:
+    now = datetime.now(timezone.utc)
+    payload: dict = {
+        "iss": "local",
+        "iat": int(now.timestamp()),
+        "exp": int(
+            (now + timedelta(days=JWT_REFRESH_EXPIRES_DAYS)).timestamp()
+        ),
+        "sub": sub,
+        "type": "refresh",
+    }
+    token = jwt.encode(payload, JWT_REFRESH_SECRET, algorithm=JWT_REFRESH_ALG)
+    return token
+
+
+
+def decode_token(token: str) -> dict[str, Any]:
+    return jwt.decode(
+        token,
+        settings.security.JWT_SECRET,
+        algorithms=[settings.security.JWT_ALG],
+        options={"require": ["exp", "iat", "sub"]},
+    )
+
+
+def issue_tokens_for_user(user: User) -> dict:
+    """
+    Повертає дикт з access + refresh токенами для користувача.
+    """
+    sub = str(user.id)
+    logger.info("user email = {}", user.email)
+    access = create_access_token(sub=sub, email=user.email)
+    logger.info("access = {}", access)
+    refresh = create_refresh_token(sub=sub)
+    logger.info("refresh = {}", refresh)
+    return {
+        "access_token": access,
+        "refresh_token": refresh,
+        "token_type": "bearer",
+    }
+

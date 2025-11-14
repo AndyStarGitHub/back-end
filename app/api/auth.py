@@ -3,16 +3,15 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_identity, get_current_user_auth0
+from app.core.deps import get_current_identity, get_current_user_auth0, get_current_user
 from app.core.errors import AuthError, NotFound
 from app.db.database import get_db
 from app.models.user import User
 from app.repositories import user_repo
-from app.core.security import decode_token
 from app.repositories.user_repo import user_repo
 from app.schemas.auth import TokenResponse, LoginRequest, RefreshIn
-from app.services.auth_service import AuthService
-
+from app.schemas.user import UserOut
+from app.services.auth_service import AuthService, decode_token
 
 router = APIRouter()
 
@@ -65,14 +64,9 @@ async def _current_user(request: Request, db: AsyncSession) -> User:
     return u
 
 
-
-
-
-@router.get("/me")
-async def me(req: Request, identity=Depends(get_current_identity)):
-    logger.info("AUTH HEADER RAW: {}", req.headers.get("authorization"))
-    logger.info("identity: {}", identity)
-    return identity
+@router.get("/me", response_model=UserOut)
+async def me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @router.get("/auth/debug-headers")

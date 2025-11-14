@@ -57,3 +57,8 @@ class NotFound(AppError):
 class Conflict(AppError):
     pass
 
+
+class TokenDecodeError(Exception):
+    pass
+
+
