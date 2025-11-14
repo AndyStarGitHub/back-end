@@ -4,14 +4,15 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_identity, get_current_user_auth0
+from app.core.errors import AuthError, NotFound
 from app.db.database import get_db
 from app.models.user import User
 from app.repositories import user_repo
 from app.core.security import decode_token
 from app.repositories.user_repo import user_repo
-from app.schemas.auth import TokenResponse, LoginRequest
-from app.schemas.user import UserOut
+from app.schemas.auth import TokenResponse, LoginRequest, RefreshIn
 from app.services.auth_service import AuthService
+
 
 router = APIRouter()
 
@@ -29,9 +30,6 @@ async def login(payload: LoginRequest, svc: AuthService = Depends(auth_service_d
     logger.info("Logit started:", payload.email)
     # якщо креди невалідні — з сервісу полетить InvalidCredentials -> автоматом 401
     return await svc.login_with_password(email=payload.email, password=payload.password)
-
-
-
 
 
 async def _current_user(request: Request, db: AsyncSession) -> User:
@@ -84,3 +82,24 @@ async def debug_headers(req: Request):
     logger.info("DEBUG /auth/debug-headers, Authorization = {}", auth)
     return {"authorization": auth}
 
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_tokens(
+    payload: RefreshIn,
+    svc: AuthService = Depends(auth_service_dep),
+):
+    """
+    Приймає refresh_token і повертає нову пару (access + refresh).
+    """
+    try:
+        return await svc.refresh_tokens(payload.refresh_token)
+    except AuthError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+    except NotFound as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )

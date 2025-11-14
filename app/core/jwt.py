@@ -38,18 +38,37 @@ class TokenDecodeError(Exception):
     pass
 
 
-def decode_local_token(token: str) -> dict:
+def decode_access_token(token: str) -> dict:
     try:
-        data = jwt.decode(
+        payload = jwt.decode(
             token,
-            JWT_SECRET,
-            algorithms=[JWT_ALG],
-            options={"require": ["iss", "sub", "exp"]},
-            issuer=JWT_ISS,
+            settings.security.JWT_SECRET,
+            algorithms=[settings.security.JWT_ALG],
         )
-        return data
     except jwt.PyJWTError as e:
-        raise TokenDecodeError(str(e))
+        raise TokenDecodeError(f"Invalid access token: {e}")
+
+    if payload.get("type") != "access":
+        raise TokenDecodeError("Not an access token")
+
+    return payload
+
+
+def decode_refresh_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.security.JWT_SECRET,
+            algorithms=[settings.security.JWT_ALG],
+        )
+    except jwt.PyJWTError as e:
+        raise TokenDecodeError(f"Invalid refresh token: {e}")
+
+    if payload.get("type") != "refresh":
+        raise TokenDecodeError("Not a refresh token")
+
+    return payload
+
 
 
 def create_refresh_token(*, sub: str) -> str:
@@ -65,22 +84,3 @@ def create_refresh_token(*, sub: str) -> str:
     }
     token = jwt.encode(payload, JWT_REFRESH_SECRET, algorithm=JWT_REFRESH_ALG)
     return token
-
-
-def decode_refresh_token(token: str) -> dict:
-    try:
-        payload = jwt.decode(
-            token,
-            JWT_REFRESH_SECRET,
-            algorithms=[JWT_REFRESH_ALG],
-            options={"require": ["exp", "sub"]},
-        )
-    except jwt.PyJWTError as e:
-        raise TokenDecodeError(str(e))
-
-    if payload.get("type") != "refresh":
-        # Не дамо використати access або будь-що інше як refresh
-        raise TokenDecodeError("Not a refresh token")
-
-    return payload
-

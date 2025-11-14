@@ -14,7 +14,7 @@ from app.db.database import get_db
 from app.models import User
 from app.repositories.user_repo import user_repo
 from app.services.auth_service import AuthService
-from app.core.jwt import decode_local_token, TokenDecodeError
+from app.core.jwt import decode_access_token, TokenDecodeError
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -69,7 +69,7 @@ async def get_current_identity(
     # 3️⃣ Інакше вважаємо, що це наш локальний JWT (HS256) → перевіряємо локально
     logger.info("get_current_identity: treating token as local JWT (HS256)")
     try:
-        payload = decode_local_token(token)
+        payload = decode_access_token(token)
     except TokenDecodeError as e:
         logger.warning("get_current_identity: local JWT decode failed: %s", e)
         raise HTTPException(
