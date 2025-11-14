@@ -6,7 +6,6 @@ email-validator==2.2.0
 fastapi==0.119.1
 httpx==0.28.1
 loguru==0.7.3
-uvicorn[standard]==0.30.6
 passlib[bcrypt]==1.7.4
 psycopg2-binary==2.9.11
 PyJWT>=2.8.0
@@ -14,9 +13,9 @@ pydantic==2.12.3
 pydantic-settings==2.11.0
 python-dotenv==1.1.1
 python-multipart==0.0.20
-SQLAlchemy==2.0.44
 redis==7.0.0
+SQLAlchemy==2.0.44
+uvicorn[standard]==0.30.6
 
 starlette~=0.48.0
-loguru~=0.7.3
 pytest~=8.4.2

@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_identity
+from app.core.deps import get_current_identity, get_current_user_auth0
 from app.db.database import get_db
 from app.models.user import User
 from app.repositories import user_repo
 from app.core.security import decode_token
 from app.repositories.user_repo import user_repo
 from app.schemas.auth import TokenResponse, LoginRequest
+from app.schemas.user import UserOut
 from app.services.auth_service import AuthService
 
 router = APIRouter()
@@ -29,26 +30,7 @@ async def login(payload: LoginRequest, svc: AuthService = Depends(auth_service_d
     # якщо креди невалідні — з сервісу полетить InvalidCredentials -> автоматом 401
     return await svc.login_with_password(email=payload.email, password=payload.password)
 
-# @router.post("/login")
-# async def login(payload: SignInPayload, svc: AuthService = Depends(auth_service_dep)):
-#     try:
-#         result = await svc.login_with_password(email=payload.email, password=payload.password)
-#         # бажано серіалізувати user через схему
-#         return {
-#             "access_token": result["access_token"],
-#             "token_type": "bearer",
-#             "user": UserOut.model_validate(result["user"]),
-#         }
-#     except InvalidCredentials:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Invalid credentials"
-#         )
-#     except InactiveUser:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="User is inactive"
-#         )
+
 
 
 
@@ -85,13 +67,11 @@ async def _current_user(request: Request, db: AsyncSession) -> User:
     return u
 
 
-# @router.get("/me", response_model=UserOut)
-# async def me(user = Depends(get_current_user)):
-#     return user
+
+
 
 @router.get("/me")
 async def me(req: Request, identity=Depends(get_current_identity)):
-    # тимчасовий лог того, що реально прийшло
     logger.info("AUTH HEADER RAW: {}", req.headers.get("authorization"))
     logger.info("identity: {}", identity)
     return identity

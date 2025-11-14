@@ -23,7 +23,7 @@ def _jwks_url() -> str:
     Приклад: https://tenant.us.auth0.com/.well-known/jwks.json
     """
     issuer = settings.auth0.ISSUER  # має закінчуватись на "/"
-    logger.info("Issuer: %s", issuer)
+    logger.info("Issuer: {}", issuer)
     # urljoin сам розрулить зайві/відсутні слеші
     return urljoin(issuer, ".well-known/jwks.json")
 
@@ -41,17 +41,15 @@ def verify_auth0_token(token: str) -> dict:
         unverified = jwt.get_unverified_header(token)
         logger.info("AUTH0 token header: {}", (unverified.get("kid"), unverified.get("alg")))
     except Exception as e:
-        logger.exception("Failed to parse JWT header: %s", e)
+        logger.exception("Failed to parse JWT header: {}}", e)
         raise
 
-    logger.info(
-        "AUTH0 using: ISS=%s AUD=%s JWKS=%s",
-        settings.auth0.ISSUER,
-        settings.auth0.AUDIENCE,
-        getattr(settings.auth0, "JWKS_URL", None) or _jwks_url(),
-    )
+    logger.info("AUTH0 using issuer {}:",   settings.auth0.ISSUER)
+    logger.info("AUTH0 using audience {}:",   settings.auth0.AUDIENCE)
+    logger.info("AUTH0 using JWKS {}:",   getattr(settings.auth0, "JWKS_URL", None) or _jwks_url())
 
     signing_key = _jwks_client().get_signing_key_from_jwt(token).key
+    logger.info("verify_auth0_token - signing_key {}:",   signing_key)
     payload = jwt.decode(
         token,
         signing_key,
@@ -59,7 +57,9 @@ def verify_auth0_token(token: str) -> dict:
         audience=settings.auth0.AUDIENCE,
         issuer=settings.auth0.ISSUER,
     )
-    logger.info("AUTH0 payload OK: sub=%s", payload.get("sub"))
+    logger.info("verify_auth0_token - payload {}:",   payload)
+    logger.info("AUTH0 payload OK sub: {}", payload.get("sub"))
+    logger.info("AUTH0 payload : {}", payload)
     return payload
 
 
