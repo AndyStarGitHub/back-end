@@ -94,35 +94,6 @@ async def update_user(
         raise HTTPException(status_code=500, detail="Failed to update user")
 
 
-# @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-# async def delete_user(
-#     user_id: int,
-#     svc: UserService = Depends(get_user_service)
-# ):
-#     try:
-#         ok = await svc.delete_user(user_id)
-#         if not ok:
-#             raise HTTPException(status_code=404, detail="User not found")
-#         log.info("User deleted id=%s", user_id)
-#         return
-#     except sa_exc.SQLAlchemyError as exc:
-#         log.exception("Failed to delete user id=%s: %s", user_id, exc)
-#         raise HTTPException(status_code=500, detail="Failed to delete user")
-#
-#
-# @router.patch("/{user_id}", response_model=UserOut, dependencies=[Depends(get_current_identity)])
-# async def update_self(
-#     user_id: int,
-#     payload: UserSelfUpdate,
-#     db: AsyncSession = Depends(get_db),
-#     current_user: User = Depends(get_current_user_auth0),
-#     svc: UserService = Depends(user_service_dep),
-# ):
-#
-#     user = await svc.self_update_profile(user_id, payload.full_name)
-#     return user
-
-
 @router.patch("/{user_id}/password", status_code=204, dependencies=[Depends(get_current_identity)])
 async def change_password(
     user_id: int,
