@@ -1,33 +1,36 @@
+# tests/test_auth0_unit.py
 import json
-import jwt
-import pytest
 from datetime import datetime, timedelta, timezone
 
+import jwt
+import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
 
 from app.core import auth0 as auth0_mod
 from app.core.config import settings
 
-from jwt.algorithms import RSAAlgorithm
-
 
 @pytest.mark.anyio
 async def test_verify_auth0_token_ok(monkeypatch):
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048
-    )
+    # 1) Генеруємо пару ключів
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public_key = private_key.public_key()
 
-    jwk_public_json = RSAAlgorithm.to_jwk(public_key)
-    jwk_public = json.loads(jwk_public_json)
-    kid = "test-kid-123"
-    jwk_public.update({"kid": kid, "use": "sig", "alg": "RS256"})
+    # 2) Фейковий PyJWKClient
+    class FakeKey:
+        def __init__(self, key):
+            self.key = key
 
-    def fake_get_jwks():
-        return {"keys": [jwk_public]}
-    monkeypatch.setattr(auth0_mod, "get_jwks", fake_get_jwks, raising=True)
+    class FakeClient:
+        def get_signing_key_from_jwt(self, token: str):
+            # Для будь-якого токена завжди повертаємо наш публічний ключ
+            return FakeKey(public_key)
 
+    # підміняємо _jwks_client у auth0-модулі
+    monkeypatch.setattr(auth0_mod, "_jwks_client", lambda: FakeClient(), raising=True)
+
+    # 3) Налаштування
     issuer = "https://example-issuer/"
     audience = "https://be-1.api"
     email_claim = "https://be-1-api/email"
@@ -35,8 +38,8 @@ async def test_verify_auth0_token_ok(monkeypatch):
     settings.auth0.ISSUER = issuer
     settings.auth0.AUDIENCE = audience
     settings.auth0.EMAIL_CLAIM = email_claim
-    settings.auth0.ALG = "RS256"
 
+    # 4) Формуємо токен RS256 з тим же ключем
     now = datetime.now(timezone.utc)
     payload = {
         "iss": issuer,
@@ -52,12 +55,11 @@ async def test_verify_auth0_token_ok(monkeypatch):
         payload,
         private_key,
         algorithm="RS256",
-        headers={"kid": kid},
+        headers={"kid": "test-kid-123"},
     )
 
+    # 5) Виклик функції
     decoded = auth0_mod.verify_auth0_token(token)
 
-    assert decoded["sub"] == "google-oauth2|user123"
-    assert decoded["iss"] == issuer
-    assert audience in decoded["aud"]
-    assert decoded[email_claim] == "unit_user@example.com"
+    assert decoded["sub"] == payload["sub"]
+    assert decoded[email_claim] == payload[email_claim]

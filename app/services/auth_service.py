@@ -71,7 +71,6 @@ class AuthService:
 
 
 def create_access_token(*, sub: str, email: str, extra: dict | None = None) -> str:
-    # now = datetime.now(datetime.timezone.utc)
     now = datetime.now(timezone.utc)
     payload: dict = {
         "iss": "local",
