@@ -18,6 +18,10 @@ class SecuritySettings(BaseSettings):
     JWT_ALG: str = Field(default="HS256")
     JWT_EXPIRES_MIN: int = Field(default=60)
 
+    JWT_REFRESH_SECRET: str = "dev-refresh-secret-change-me"
+    JWT_REFRESH_ALG: str = "HS256"
+    JWT_REFRESH_EXPIRES_MIN: int = 7 * 24 * 60
+
 
 class Auth0Settings(BaseSettings):
     DOMAIN: str

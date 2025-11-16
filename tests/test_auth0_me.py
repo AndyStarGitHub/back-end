@@ -1,11 +1,8 @@
-# tests/test_auth0_me.py
-import json
 from datetime import datetime, timedelta, timezone
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jwt.algorithms import RSAAlgorithm
 from loguru import logger
 
 from app.core import auth0 as auth0_mod
@@ -16,8 +13,10 @@ AUTH_BASE = "/api/v1/auth"
 
 @pytest.mark.anyio
 async def test_auth0_me_ok(client, monkeypatch):
-    # 1) Генеруємо ключі
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048
+    )
     public_key = private_key.public_key()
 
     class FakeKey:
@@ -28,8 +27,12 @@ async def test_auth0_me_ok(client, monkeypatch):
         def get_signing_key_from_jwt(self, token: str):
             return FakeKey(public_key)
 
-    # Підміняємо _jwks_client, щоб не ходити в реальний Auth0
-    monkeypatch.setattr(auth0_mod, "_jwks_client", lambda: FakeClient(), raising=True)
+    monkeypatch.setattr(
+        auth0_mod,
+        "_jwks_client",
+        lambda: FakeClient(),
+        raising=True
+    )
 
     issuer = "https://example-issuer/"
     audience = "https://be-1.api"
@@ -58,7 +61,6 @@ async def test_auth0_me_ok(client, monkeypatch):
         headers={"kid": "int-kid-456"},
     )
 
-    # 2) Викликаємо /auth/me з цим токеном
     res = await client.get(
         f"{AUTH_BASE}/me",
         headers={"Authorization": f"Bearer {token}"},
@@ -68,11 +70,8 @@ async def test_auth0_me_ok(client, monkeypatch):
     body = res.json()
     logger.info("BODY: {}", body)
 
-    # 3) Перевіряємо, що /auth/me повернув користувача з БД
     assert body["email"] == email
     assert isinstance(body["id"], int)
-    # у нас full_name за замовчуванням None при create_from_email
     assert body["full_name"] is None
-    # created_at / updated_at теж можна перевірити, що є
     assert "created_at" in body
     assert "updated_at" in body

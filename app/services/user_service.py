@@ -10,14 +10,10 @@ from app.models.user import User
 
 
 class UserService:
-    # def __init__(self, db: AsyncSession):
-    #     self.db = db
-
 
     def __init__(self, db: AsyncSession, current_user: User | None = None):
         self.db = db
         self.current_user = current_user
-
 
     async def create_user(self, payload: UserCreate) -> User:
         existing = await user_repo.get_by_email(self.db, payload.email)
@@ -65,19 +61,20 @@ class UserService:
 
     def _ensure_self(self, target_user_id: int):
         if not self.current_user or self.current_user.id != target_user_id:
-            # 403 за логікою задачі “можна тільки над собою”
             raise Forbidden("You can only modify your own profile")
 
-    async def self_update_profile(self, user_id: int, full_name: str | None) -> User:
+    async def self_update_profile(
+            self,
+            user_id: int,
+            full_name: str | None
+    ) -> User:
         self._ensure_self(user_id)
 
-        # жодних змін email — він навіть не приходить у схемі
         updates = {}
         if full_name is not None:
             updates["full_name"] = full_name
 
         if not updates:
-            # нічого не змінюємо
             user = await user_repo.get_by_id(self.db, user_id)
             if not user:
                 raise NotFound("User not found")
@@ -88,7 +85,11 @@ class UserService:
             raise NotFound("User not found")
         return updated
 
-    async def self_change_password(self, user_id: int, new_password: str) -> User:
+    async def self_change_password(
+            self,
+            user_id: int,
+            new_password: str
+    ) -> User:
         self._ensure_self(user_id)
 
         if len(new_password) < 6:

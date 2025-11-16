@@ -1,5 +1,3 @@
-import logging
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -24,20 +22,6 @@ async def lifespan(app: FastAPI):
     yield
     await close_redis()
 
-
-# setup_logging()
-# app/main.py (на самому початку файлу, до створення app)
-# import logging, sys
-
-# logging.basicConfig(
-#     level=logging.INFO,  # або DEBUG
-#     format="%(levelname)s %(asctime)s %(name)s: %(message)s",
-#     stream=sys.stdout,
-# )
-
-# додатково, щоб наші логери точно не губилися
-# logging.getLogger("app").setLevel(logging.DEBUG)
-# logging.getLogger("app.auth").setLevel(logging.DEBUG)
 
 app = FastAPI()
 register_exception_handlers(app)

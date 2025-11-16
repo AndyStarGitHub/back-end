@@ -19,9 +19,16 @@ AUTH_BASE = "/api/v1/auth"
 def _mk_payload(variant=1, idx=0):
     email = f"user{idx}@example.com"
     if variant == 1:
-        return {"email": email, "hashed_password": "secret123", "full_name": "User One"}
+        return {"email": email,
+                "hashed_password": "secret123",
+                "full_name": "User One"
+                }
     else:
-        return {"email": email, "password": "secret123", "full_name": "User One"}
+        return {
+            "email": email,
+            "password": "secret123",
+            "full_name": "User One"
+        }
 
 
 async def _create_user_resilient(client, idx=0):
@@ -91,7 +98,6 @@ async def test_update_user(client):
 
 @pytest.mark.anyio
 async def test_delete_user(client):
-    # 1. Створюємо юзера через API
     payload = {
         "email": "del_user@example.com",
         "password": "secret123",
@@ -103,18 +109,15 @@ async def test_delete_user(client):
     data = created.json()
     user_id = data.get("id") or data.get("user", {}).get("id")
 
-    # 2. Генеруємо локальний access-token, як бек
     token = create_access_token(
         sub=str(user_id),
         email=payload.get("email")
     )
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 3. Видаляємо СВОГО ж користувача
     delete_resp = await client.delete(f"{BASE}/{user_id}", headers=headers)
     assert delete_resp.status_code in (200, 204)
 
-    # 4. Перевіряємо, що юзера вже немає
     get_after = await client.get(f"{BASE}/{user_id}")
     assert get_after.status_code == 404
 

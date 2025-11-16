@@ -6,7 +6,6 @@ from fastapi import (
 )
 from loguru import logger
 from sqlalchemy import exc as sa_exc
-import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
@@ -20,14 +19,13 @@ from app.schemas.user import (
     UserUpdate,
     UserOut,
     UsersListResponse,
-    UserDetailResponse, UserSelfUpdate, UserPasswordChange
+    UserDetailResponse, UserPasswordChange
 )
 
 from app.services.deps import get_user_service, user_service_dep
 from app.services.user_service import UserService
 
 
-log = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -41,7 +39,7 @@ async def list_users(
         total, items = await svc.list_users(offset=offset, limit=limit)
         return UsersListResponse(total=total, items=items)
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to list users: %s", exc)
+        logger.exception("Failed to list users: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to list users")
 
 
@@ -56,7 +54,7 @@ async def get_user_by_id(
             raise HTTPException(status_code=404, detail="User not found")
         return UserDetailResponse.model_validate(user)
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to fetch user id=%s: %s", user_id, exc)
+        logger.exception("Failed to fetch user id=: {}}", (user_id, exc))
         raise HTTPException(status_code=500, detail="Failed to fetch user")
 
 
@@ -75,7 +73,7 @@ async def create_user(
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to create user: %s", exc)
+        logger.exception("Failed to create user: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to create user")
 
 
@@ -91,11 +89,15 @@ async def update_user(
             raise HTTPException(status_code=404, detail="User not found")
         return UserOut.model_validate(user)
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to update user id=%s: %s", user_id, exc)
+        logger.exception("Failed to update user id=: {}", (user_id, exc))
         raise HTTPException(status_code=500, detail="Failed to update user")
 
 
-@router.patch("/{user_id}/password", status_code=204, dependencies=[Depends(get_current_identity)])
+@router.patch(
+    "/{user_id}/password",
+    status_code=204,
+    dependencies=[Depends(get_current_identity)]
+)
 async def change_password(
     user_id: int,
     payload: UserPasswordChange,
@@ -113,7 +115,5 @@ async def delete_user(
     svc: UserService = Depends(user_service_dep),
     current_user: User = Depends(get_current_user),
 ):
-    # await svc.delete_user(user_id=user_id, current_user=current_user)
     await svc.delete_user(user_id=user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-

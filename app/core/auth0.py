@@ -5,26 +5,17 @@ from urllib.parse import urljoin
 import jwt
 
 try:
-    from jwt import PyJWKClient  # PyJWT 2.x
-except ImportError:               # деякі старі оточення
+    from jwt import PyJWKClient
+except ImportError:
     from jwt.jwks_client import PyJWKClient
 
 
-from app.core.config import settings  # звідки ти читаєш AUTH0_* значення
-
-
-
-
+from app.core.config import settings
 
 
 def _jwks_url() -> str:
-    """
-    Будуємо правильний JWKS URL з урахуванням слеша в кінці ISSUER.
-    Приклад: https://tenant.us.auth0.com/.well-known/jwks.json
-    """
-    issuer = settings.auth0.ISSUER  # має закінчуватись на "/"
+    issuer = settings.auth0.ISSUER
     logger.info("Issuer: {}", issuer)
-    # urljoin сам розрулить зайві/відсутні слеші
     return urljoin(issuer, ".well-known/jwks.json")
 
 
@@ -36,17 +27,21 @@ def _jwks_client() -> PyJWKClient:
 
 
 def verify_auth0_token(token: str) -> dict:
-    # необов'язково, але корисно для діагностики
     try:
         unverified = jwt.get_unverified_header(token)
-        logger.info("AUTH0 token header: {}", (unverified.get("kid"), unverified.get("alg")))
+        logger.info(
+            "AUTH0 token header: {}",
+            (unverified.get("kid"), unverified.get("alg"))
+        )
     except Exception as e:
         logger.exception("Failed to parse JWT header: {}}", e)
         raise
 
     logger.info("AUTH0 using issuer {}:",   settings.auth0.ISSUER)
     logger.info("AUTH0 using audience {}:",   settings.auth0.AUDIENCE)
-    logger.info("AUTH0 using JWKS {}:",   getattr(settings.auth0, "JWKS_URL", None) or _jwks_url())
+    logger.info(
+        "AUTH0 using JWKS {}:",
+        getattr(settings.auth0, "JWKS_URL", None) or _jwks_url())
 
     signing_key = _jwks_client().get_signing_key_from_jwt(token).key
     logger.info("verify_auth0_token - signing_key {}:",   signing_key)
@@ -64,6 +59,5 @@ def verify_auth0_token(token: str) -> dict:
 
 
 def extract_email(payload: dict) -> str | None:
-    # шукаємо кастомний клейм або стандартний email
     email_claim = getattr(settings.auth0, "EMAIL_CLAIM", None)
     return payload.get(email_claim) or payload.get("email")

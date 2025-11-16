@@ -1,17 +1,22 @@
+import jwt
 from loguru import logger
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_identity, get_current_user_auth0, get_current_user
-from app.core.errors import AuthError, NotFound
+from app.core.config import settings
+from app.core.deps import get_current_user
 from app.db.database import get_db
 from app.models.user import User
 from app.repositories import user_repo
 from app.repositories.user_repo import user_repo
-from app.schemas.auth import TokenResponse, LoginRequest, RefreshIn
+from app.schemas.auth import TokenResponse, LoginRequest
 from app.schemas.user import UserOut
-from app.services.auth_service import AuthService, decode_token
+from app.services.auth_service import (
+    AuthService,
+    decode_token,
+    create_access_token
+)
 
 router = APIRouter()
 
@@ -19,16 +24,26 @@ router = APIRouter()
 def auth_service_dep(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(db=db)
 
+
 class SignInPayload(BaseModel):
     email: EmailStr
     password: str
 
 
-@router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
-async def login(payload: LoginRequest, svc: AuthService = Depends(auth_service_dep)):
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK
+)
+async def login(
+        payload: LoginRequest,
+        svc: AuthService = Depends(auth_service_dep)
+):
     logger.info("Logit started:", payload.email)
-    # якщо креди невалідні — з сервісу полетить InvalidCredentials -> автоматом 401
-    return await svc.login_with_password(email=payload.email, password=payload.password)
+    return await svc.login_with_password(
+        email=payload.email,
+        password=payload.password
+    )
 
 
 async def _current_user(request: Request, db: AsyncSession) -> User:
@@ -55,13 +70,13 @@ async def _current_user(request: Request, db: AsyncSession) -> User:
             detail="Invalid token payload"
         )
 
-    u = await user_repo.get_by_id(db, int(user_id))
-    if not u:
+    us = await user_repo.get_by_id(db, int(user_id))
+    if not us:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
         )
-    return u
+    return us
 
 
 @router.get("/me", response_model=UserOut)
@@ -77,23 +92,50 @@ async def debug_headers(req: Request):
     return {"authorization": auth}
 
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_tokens(
-    payload: RefreshIn,
-    svc: AuthService = Depends(auth_service_dep),
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh_token_endpoint(
+    body: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Приймає refresh_token і повертає нову пару (access + refresh).
-    """
     try:
-        return await svc.refresh_tokens(payload.refresh_token)
-    except AuthError as e:
+        payload = jwt.decode(
+            body.refresh_token,
+            settings.security.JWT_REFRESH_SECRET,
+            algorithms=[settings.security.JWT_REFRESH_ALG],
+        )
+    except jwt.InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail="Invalid refresh token",
         )
-    except NotFound as e:
+
+    if payload.get("type") != "refresh":
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type",
         )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+
+    user = await user_repo.get_by_id(db, int(user_id))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    new_access = create_access_token(sub=str(user.id), email=user.email)
+
+    return {
+        "access_token": new_access,
+        "token_type": "bearer",
+    }
