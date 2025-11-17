@@ -78,24 +78,6 @@ async def get_current_identity(
     }
 
 
-async def get_current_user_auth0(
-    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
-    db: AsyncSession = Depends(get_db),
-):
-    if creds is None or creds.scheme.lower() != "bearer":
-        raise InvalidCredentials("Missing bearer token")
-
-    token = creds.credentials
-    claims = verify_auth0_token(token)
-    email = extract_email(claims)
-
-    user = await user_repo.get_by_email(db, email)
-    if not user:
-        user = await user_repo.create_from_email(db, email)
-
-    return user
-
-
 async def get_current_user_email(
     payload: Dict[str, Any] = Depends(get_current_identity),
 ) -> str:
