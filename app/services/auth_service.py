@@ -50,24 +50,6 @@ class AuthService:
         logger.info("login_with_password before return tokens = {}", tokens)
         return tokens
 
-    async def refresh_tokens(self, refresh_token: str) -> dict:
-        try:
-            payload = decode_refresh_token(refresh_token)
-        except TokenDecodeError as e:
-            raise AuthError(str(e))
-
-        sub = payload.get("sub")
-        if not sub:
-            raise AuthError("Invalid refresh token payload")
-
-        user = await user_repo.get_by_id(self.db, int(sub))
-        if not user:
-            raise NotFound("User not found")
-
-        if getattr(user, "is_active", True) is False:
-            raise AuthError("User inactive")
-
-        return issue_tokens_for_user(user)
 
     async def refresh_access_token(self, refresh_token: str) -> dict:
         try:
