@@ -16,6 +16,7 @@ from app.core.config.redis import RedisSettings
 class SecuritySettings(BaseSettings):
     JWT_SECRET: str = Field(default="dev-secret-change-me")
     JWT_ALG: str = Field(default="HS256")
+    JWT_ISS: str = Field(default="local")
     JWT_EXPIRES_MIN: int = Field(default=60)
 
     JWT_REFRESH_SECRET: str = "dev-refresh-secret-change-me"

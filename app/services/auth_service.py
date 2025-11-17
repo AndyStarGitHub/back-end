@@ -1,6 +1,5 @@
 from __future__ import annotations
 from uuid import uuid4
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -21,17 +20,13 @@ from app.core.security import verify_password
 from app.models.user import User
 
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
-JWT_ALG = os.getenv("JWT_ALG", "HS256")
-JWT_ISS = os.getenv("JWT_ISS", "local")
-JWT_EXPIRES_MIN = int(os.getenv("JWT_EXPIRES_MIN", "60"))
+JWT_SECRET = settings.security.JWT_SECRET
+JWT_ALG = settings.security.JWT_ALG
+JWT_ISS = settings.security.JWT_ISS
+JWT_EXPIRES_MIN = settings.security.JWT_EXPIRES_MIN
 
-JWT_REFRESH_SECRET = getattr(
-    settings,
-    "JWT_REFRESH_SECRET",
-    None
-) or JWT_SECRET
-JWT_REFRESH_EXPIRES_DAYS = getattr(settings, "JWT_REFRESH_EXPIRES_DAYS", 7)
+JWT_REFRESH_SECRET = settings.security.JWT_REFRESH_SECRET
+JWT_REFRESH_EXPIRES_MIN = settings.security.JWT_REFRESH_EXPIRES_MIN
 JWT_REFRESH_ALG = JWT_ALG
 
 
