@@ -74,6 +74,34 @@ class AuthService:
 
         return issue_tokens_for_user(user)
 
+    async def refresh_access_token(self, refresh_token: str) -> dict:
+        try:
+            payload = jwt.decode(
+                refresh_token,
+                settings.security.JWT_REFRESH_SECRET,
+                algorithms=[settings.security.JWT_REFRESH_ALG],
+            )
+        except jwt.InvalidTokenError:
+            raise InvalidCredentials("Invalid credentials")
+
+        if payload.get("type") != "refresh":
+            raise InvalidCredentials("Invalid credentials")
+
+        user_id = payload.get("sub")
+        if not user_id:
+            raise InvalidCredentials("Invalid credentials")
+
+        user = await user_repo.get_by_id(self.db, int(user_id))
+        if not user:
+            raise InvalidCredentials("Invalid credentials")
+
+        new_access = create_access_token(sub=str(user.id), email=user.email)
+
+        return {
+            "access_token": new_access,
+            "token_type": "bearer",
+        }
+
 
 def decode_access_token(token: str) -> dict:
     try:

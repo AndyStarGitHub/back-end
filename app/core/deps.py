@@ -9,7 +9,7 @@ from jwt import PyJWTError
 from jwt.exceptions import PyJWKClientError
 
 from app.core.auth0 import verify_auth0_token, extract_email
-from app.core.errors import TokenDecodeError
+from app.core.errors import TokenDecodeError, InvalidCredentials, Forbidden
 from app.db.database import get_db
 from app.models import User
 from app.repositories.user_repo import user_repo
@@ -24,10 +24,7 @@ async def get_current_identity(
     logger.info("get_current_identity: raw creds = %s", creds)
 
     if creds is None or creds.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token",
-        )
+        raise TokenDecodeError("Missing bearer token")
 
     token = creds.credentials
 
@@ -38,10 +35,7 @@ async def get_current_identity(
             "get_current_identity: failed to parse JWT header: %s",
             ex
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise TokenDecodeError("Invalid token")
 
     alg = header.get("alg")
     kid = header.get("kid")
@@ -63,27 +57,18 @@ async def get_current_identity(
                 "get_current_identity: Auth0 verification failed: %s",
                 ex
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Auth0 token",
-            )
+            raise TokenDecodeError("Invalid Auth0 token")
 
     logger.info("get_current_identity: treating token as local JWT (HS256)")
     try:
         payload = decode_access_token(token)
     except TokenDecodeError as ex:
         logger.warning("get_current_identity: local JWT decode failed: %s", ex)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise TokenDecodeError("Invalid token")
 
     email = payload.get("email")
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email not found in token",
-        )
+        raise TokenDecodeError("Email not found in token")
 
     logger.info("get_current_identity: local JWT OK, email=%s", email)
     return {
@@ -98,10 +83,7 @@ async def get_current_user_auth0(
     db: AsyncSession = Depends(get_db),
 ):
     if creds is None or creds.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token",
-        )
+        raise InvalidCredentials("Missing bearer token")
 
     token = creds.credentials
     claims = verify_auth0_token(token)
@@ -119,10 +101,7 @@ async def get_current_user_email(
 ) -> str:
     email = extract_email(payload)
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email claim not found"
-        )
+        raise TokenDecodeError("Email claim not found")
     return email
 
 
@@ -160,10 +139,7 @@ async def get_current_user(
 
     if source == "auth0":
         if not email:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Email is missing in Auth0 token",
-            )
+            raise TokenDecodeError("Email is not found in the token")
 
         user = await user_repo.get_by_email(db, email)
         if not user:
@@ -173,35 +149,20 @@ async def get_current_user(
     if source == "local":
         sub = payload.get("sub")
         if not sub:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid local token payload (no sub)",
-            )
+            raise TokenDecodeError("Invalid local token subject")
 
         try:
             user_id = int(sub)
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid local token subject",
-            )
+            raise TokenDecodeError("Invalid local token subject")
 
         user = await user_repo.get_by_id(db, user_id)
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
-            )
+            raise InvalidCredentials("Invalid credentials")
 
         if getattr(user, "is_active", True) is False:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User inactive",
-            )
+            raise Forbidden("User inactive")
 
         return user
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unknown auth source",
-    )
+    raise InvalidCredentials("Unknown auth source")
