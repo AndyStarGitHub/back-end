@@ -50,7 +50,6 @@ class AuthService:
         logger.info("login_with_password before return tokens = {}", tokens)
         return tokens
 
-
     async def refresh_access_token(self, refresh_token: str) -> dict:
         try:
             payload = jwt.decode(
@@ -92,22 +91,6 @@ def decode_access_token(token: str) -> dict:
 
     if payload.get("type") != "access":
         raise TokenDecodeError("Not an access token")
-
-    return payload
-
-
-def decode_refresh_token(token: str) -> dict:
-    try:
-        payload = jwt.decode(
-            token,
-            settings.security.JWT_SECRET,
-            algorithms=[settings.security.JWT_ALG],
-        )
-    except jwt.PyJWTError as e:
-        raise TokenDecodeError(f"Invalid refresh token: {e}")
-
-    if payload.get("type") != "refresh":
-        raise TokenDecodeError("Not a refresh token")
 
     return payload
 
