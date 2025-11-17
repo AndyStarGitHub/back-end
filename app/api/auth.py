@@ -43,14 +43,6 @@ async def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.get("/auth/debug-headers")
-async def debug_headers(req: Request):
-    from loguru import logger
-    auth = req.headers.get("authorization")
-    logger.info("DEBUG /auth/debug-headers, Authorization = {}", auth)
-    return {"authorization": auth}
-
-
 class RefreshRequest(BaseModel):
     refresh_token: str
 
