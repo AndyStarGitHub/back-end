@@ -12,8 +12,6 @@ from app.repositories.user_repo import user_repo
 from app.core.errors import (
     InvalidCredentials,
     InactiveUser,
-    AuthError,
-    NotFound,
     TokenDecodeError
 )
 from app.core.security import verify_password
@@ -35,15 +33,17 @@ class AuthService:
         self.db = db
 
     async def login_with_password(self, *, email: str, password: str) -> dict:
+        logger.info("Login with password started")
         user: User | None = await user_repo.get_by_email(self.db, email)
+        logger.info("User got: {}", user)
         if not user or not verify_password(password, user.hashed_password):
             raise InvalidCredentials("Invalid credentials")
 
         if getattr(user, "is_active", True) is False:
-            raise InactiveUser()
+            raise InactiveUser("Invalid credentials")
 
         if not verify_password(password, user.hashed_password):
-            raise InvalidCredentials()
+            raise InvalidCredentials("Credentials invalid")
 
         logger.info("user = {}", user)
         tokens = issue_tokens_for_user(user)

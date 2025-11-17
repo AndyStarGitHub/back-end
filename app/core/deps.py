@@ -21,7 +21,7 @@ bearer = HTTPBearer(auto_error=False)
 async def get_current_identity(
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
 ):
-    logger.info("get_current_identity: raw creds = %s", creds)
+    logger.info("get_current_identity: raw creds = {}", creds)
 
     if creds is None or creds.scheme.lower() != "bearer":
         raise TokenDecodeError("Missing bearer token")
@@ -32,21 +32,22 @@ async def get_current_identity(
         header = jwt.get_unverified_header(token)
     except PyJWTError as ex:
         logger.warning(
-            "get_current_identity: failed to parse JWT header: %s",
+            "get_current_identity: failed to parse JWT header: {}",
             ex
         )
         raise TokenDecodeError("Invalid token")
 
     alg = header.get("alg")
     kid = header.get("kid")
-    logger.info("get_current_identity: header alg=%s kid=%s", alg, kid)
+    logger.info("get_current_identity: header alg={}", alg)
+    logger.info("get_current_identity: header kid={}", kid)
 
     if alg == "RS256" or kid is not None:
         logger.info("get_current_identity: treating token as Auth0")
         try:
             claims = verify_auth0_token(token)
             email = extract_email(claims)
-            logger.info("get_current_identity: Auth0 OK, email=%s", email)
+            logger.info("get_current_identity: Auth0 OK, email={}", email)
             return {
                 "email": email,
                 "source": "auth0",
@@ -54,23 +55,25 @@ async def get_current_identity(
             }
         except (PyJWKClientError, PyJWTError, HTTPException) as ex:
             logger.warning(
-                "get_current_identity: Auth0 verification failed: %s",
+                "get_current_identity: Auth0 verification failed: {}",
                 ex
             )
             raise TokenDecodeError("Invalid Auth0 token")
 
     logger.info("get_current_identity: treating token as local JWT (HS256)")
     try:
+        logger.info("Token: {}", token)
         payload = decode_access_token(token)
+        logger.info("Payload: {}", payload)
     except TokenDecodeError as ex:
-        logger.warning("get_current_identity: local JWT decode failed: %s", ex)
+        logger.warning("get_current_identity: local JWT decode failed: {}", ex)
         raise TokenDecodeError("Invalid token")
 
     email = payload.get("email")
     if not email:
         raise TokenDecodeError("Email not found in token")
 
-    logger.info("get_current_identity: local JWT OK, email=%s", email)
+    logger.info("get_current_identity: local JWT OK, email={}", email)
     return {
         "email": email,
         "source": "local",

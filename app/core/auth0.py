@@ -34,7 +34,7 @@ def verify_auth0_token(token: str) -> dict:
             (unverified.get("kid"), unverified.get("alg"))
         )
     except Exception as e:
-        logger.exception("Failed to parse JWT header: {}}", e)
+        logger.exception("Failed to parse JWT header: {}", e)
         raise
 
     logger.info("AUTH0 using issuer {}:",   settings.auth0.ISSUER)
