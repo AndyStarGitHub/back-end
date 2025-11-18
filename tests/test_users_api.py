@@ -3,6 +3,8 @@ import pytest
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from app.core.deps import get_current_user
+from app.main import app
 from app.services.auth_service import create_access_token
 
 
@@ -81,19 +83,38 @@ async def test_list_users(client):
 
 async def test_update_user(client):
     created = await _create_user_resilient(client, idx=4)
-    uid = created.json().get("user", created.json())["id"]
-    patch = await client.patch(
-        f"{BASE}/{uid}",
-        json={"full_name": "Renamed User"}
-    )
-    if patch.status_code == 405:
-        patch = await client.put(
+    body = created.json()
+    user_data = body.get("user", body)
+    uid = user_data["id"]
+
+    class DummyUser:
+        def __init__(self, user_id: int):
+            self.id = user_id
+
+    async def override_get_current_user():
+        return DummyUser(uid)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        patch = await client.patch(
             f"{BASE}/{uid}",
-            json={"full_name": "Renamed User"}
+            json={"full_name": "Renamed User"},
         )
-    assert patch.status_code in (200, 204)
-    get_after = await client.get(f"{BASE}/{uid}")
-    assert get_after.status_code == 200
+        if patch.status_code == 405:
+            patch = await client.put(
+                f"{BASE}/{uid}",
+                json={"full_name": "Renamed User"},
+            )
+
+        assert patch.status_code in (200, 204), patch.text
+
+        get_after = await client.get(f"{BASE}/{uid}")
+        assert get_after.status_code == 200
+        data_after = get_after.json().get("user", get_after.json())
+        assert data_after["full_name"] == "Renamed User"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.anyio
@@ -150,3 +171,169 @@ async def test_created_at_is_utc(client):
         assert True
     else:
         assert dt.tzinfo == ZoneInfo("UTC")
+
+
+@pytest.mark.asyncio
+async def test_cannot_update_other_user_profile(client):
+    created1 = await _create_user_resilient(client, idx=10)
+    created2 = await _create_user_resilient(client, idx=11)
+
+    user1 = created1.json().get("user", created1.json())
+    user2 = created2.json().get("user", created2.json())
+
+    uid1 = user1["id"]
+    uid2 = user2["id"]
+
+    class DummyUser:
+        def __init__(self, user_id: int):
+            self.id = user_id
+
+    async def override_get_current_user():
+        return DummyUser(uid2)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        resp = await client.patch(
+            f"{BASE}/{uid1}",
+            json={"full_name": "Hacked Name"},
+        )
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"] in [
+            "You can only edit your own profile",
+        ]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_cannot_change_email_via_update(client):
+    created = await _create_user_resilient(client, idx=12)
+    user = created.json().get("user", created.json())
+    uid = user["id"]
+    old_email = user["email"]
+
+    class DummyUser:
+        def __init__(self, user_id: int):
+            self.id = user_id
+
+    async def override_get_current_user():
+        return DummyUser(uid)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        resp = await client.patch(
+            f"{BASE}/{uid}",
+            json={"email": "new-email@example.com"},
+        )
+
+        assert resp.status_code in (200, 204, 400, 403, 409), resp.text
+
+        get_after = await client.get(f"{BASE}/{uid}")
+        assert get_after.status_code == 200
+        data_after = get_after.json().get("user", get_after.json())
+        assert data_after["email"] == old_email
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_cannot_delete_other_user(client):
+    created1 = await _create_user_resilient(client, idx=13)
+    created2 = await _create_user_resilient(client, idx=14)
+
+    user1 = created1.json().get("user", created1.json())
+    user2 = created2.json().get("user", created2.json())
+
+    uid1 = user1["id"]
+    uid2 = user2["id"]
+
+    class DummyUser:
+        def __init__(self, user_id: int):
+            self.id = user_id
+
+    async def override_get_current_user():
+        return DummyUser(uid2)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        resp = await client.delete(f"{BASE}/{uid1}")
+        assert resp.status_code == 403
+        assert resp.json()["detail"] in [
+            "You can only delete your own profile",
+        ]
+
+        get_after = await client.get(f"{BASE}/{uid1}")
+        assert get_after.status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_cannot_change_other_user_password(client):
+    created1 = await _create_user_resilient(client, idx=15)
+    created2 = await _create_user_resilient(client, idx=16)
+
+    user1 = created1.json().get("user", created1.json())
+    user2 = created2.json().get("user", created2.json())
+
+    uid1 = user1["id"]
+    uid2 = user2["id"]
+
+    class DummyUser:
+        def __init__(self, user_id: int):
+            self.id = user_id
+
+    async def override_get_current_user():
+        return DummyUser(uid2)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        resp = await client.post(
+            f"{BASE}/{uid1}/password",
+            json={
+                "old_password": "whatever",
+                "new_password": "NewSecret123!",
+            },
+        )
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"] in [
+            "You can only change your own password",
+        ]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_change_password_wrong_old_password(client):
+    created = await _create_user_resilient(client, idx=17)
+    user = created.json().get("user", created.json())
+    uid = user["id"]
+
+    class DummyUser:
+        def __init__(self, user_id: int):
+            self.id = user_id
+
+    async def override_get_current_user():
+        return DummyUser(uid)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        resp = await client.post(
+            f"{BASE}/{uid}/password",
+            json={
+                "old_password": "definitely_wrong_password",
+                "new_password": "SomeNewPassword123!",
+            },
+        )
+
+        assert resp.status_code == 403, resp.text
+        assert "password" in resp.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

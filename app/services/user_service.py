@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import NotFound, Conflict
-from app.core.security import hash_password
+from app.core.errors import NotFound, Conflict, Forbidden
+from app.core.security import hash_password, verify_password
 from app.repositories.user_repo import user_repo
 from app.schemas.user import UserCreate, UserUpdate
 from app.models.user import User
@@ -45,19 +45,61 @@ class UserService:
         )
 
     async def update_user(self, user_id: int, payload: UserUpdate) -> User:
-        updates = payload.model_dump(exclude_unset=True, exclude_none=True)
+        data = payload.model_dump(exclude_unset=True, exclude_none=True)
 
-        updates.pop("password", None)
-        updates.pop("hashed_password", None)
+        if "email" in data:
+            raise Conflict("Email cannot be changed")
+
+        password = data.pop("password", None)
+
+        updates: dict = {}
+
+        if "full_name" in data:
+            updates["full_name"] = data["full_name"]
+
+        if not updates:
+            user = await user_repo.get_by_id(self.db, user_id)
+            if not user:
+                raise NotFound("User not found")
+            return user
 
         user = await user_repo.update_one(self.db, user_id, **updates)
         if not user:
             raise NotFound("User not found")
         return user
 
+    async def change_password(
+            self,
+            current_user: User,
+            user_id: int,
+            old_password: str,
+            new_password: str,
+    ) -> User:
+
+        if current_user.id != user_id:
+            raise Forbidden("You can only change your own password")
+
+        user = await user_repo.get_by_id(self.db, user_id)
+        if not user:
+            raise NotFound("User not found")
+
+        if not verify_password(old_password, user.hashed_password):
+            raise Forbidden("Old password is incorrect")
+
+        new_hashed = hash_password(new_password)
+
+        user = await user_repo.update_one(
+            self.db,
+            user_id,
+            hashed_password=new_hashed,
+        )
+        if not user:
+            raise NotFound("User not found")
+
+        return user
+
     async def delete_user(self, user_id: int) -> bool:
         return await user_repo.delete_one(self.db, user_id)
 
     async def self_delete(self, user_id: int) -> bool:
-        self._ensure_self(user_id)
         return await user_repo.delete_one(self.db, user_id)
