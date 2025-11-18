@@ -4,8 +4,10 @@ from fastapi import (
     HTTPException,
     status
 )
+from loguru import logger
 from sqlalchemy import exc as sa_exc
-import logging
+
+from starlette.responses import Response
 
 from app.schemas.user import (
     UserCreate,
@@ -15,11 +17,10 @@ from app.schemas.user import (
     UserDetailResponse
 )
 
-from app.services.deps import get_user_service
+from app.services.deps import get_user_service, user_service_dep
 from app.services.user_service import UserService
 
 
-log = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -33,7 +34,7 @@ async def list_users(
         total, items = await svc.list_users(offset=offset, limit=limit)
         return UsersListResponse(total=total, items=items)
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to list users: %s", exc)
+        logger.exception("Failed to list users: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to list users")
 
 
@@ -48,7 +49,7 @@ async def get_user_by_id(
             raise HTTPException(status_code=404, detail="User not found")
         return UserDetailResponse.model_validate(user)
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to fetch user id=%s: %s", user_id, exc)
+        logger.exception("Failed to fetch user id=: {}}", (user_id, exc))
         raise HTTPException(status_code=500, detail="Failed to fetch user")
 
 
@@ -67,7 +68,7 @@ async def create_user(
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to create user: %s", exc)
+        logger.exception("Failed to create user: {}", exc)
         raise HTTPException(status_code=500, detail="Failed to create user")
 
 
@@ -83,21 +84,14 @@ async def update_user(
             raise HTTPException(status_code=404, detail="User not found")
         return UserOut.model_validate(user)
     except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to update user id=%s: %s", user_id, exc)
+        logger.exception("Failed to update user id=: {}", (user_id, exc))
         raise HTTPException(status_code=500, detail="Failed to update user")
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
-    svc: UserService = Depends(get_user_service)
+    svc: UserService = Depends(user_service_dep)
 ):
-    try:
-        ok = await svc.delete_user(user_id)
-        if not ok:
-            raise HTTPException(status_code=404, detail="User not found")
-        log.info("User deleted id=%s", user_id)
-        return
-    except sa_exc.SQLAlchemyError as exc:
-        log.exception("Failed to delete user id=%s: %s", user_id, exc)
-        raise HTTPException(status_code=500, detail="Failed to delete user")
+    await svc.delete_user(user_id=user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

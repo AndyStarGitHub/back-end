@@ -1,5 +1,3 @@
-import logging
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -8,10 +6,15 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.error_handlers import register_exception_handlers
 from app.core.errors import NotFound, Conflict
-from app.core.logging import setup_logging
 from app.services.redis_client import close_redis
 from app.routers import api_router
+
+from loguru import logger
+
+logger.add("log/meduzzen.log")
+logger.debug("That's it, beautiful and simple logging!")
 
 
 @asynccontextmanager
@@ -20,8 +23,8 @@ async def lifespan(app: FastAPI):
     await close_redis()
 
 
-setup_logging()
 app = FastAPI()
+register_exception_handlers(app)
 app.include_router(api_router)
 
 

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
-from typing import AsyncGenerator, AsyncIterator
+from typing import AsyncGenerator
 
 engine = create_async_engine(
     settings.db.ASYNC_DATABASE_URL,

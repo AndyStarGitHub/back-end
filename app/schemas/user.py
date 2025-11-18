@@ -48,3 +48,11 @@ class UsersListResponse(BaseModel):
 
 class UserDetailResponse(UserOut):
     pass
+
+
+class UserSelfUpdate(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=255)
+
+
+class UserPasswordChange(BaseModel):
+    new_password: str = Field(min_length=6, max_length=255)

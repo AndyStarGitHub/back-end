@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound, Conflict
@@ -11,6 +10,7 @@ from app.models.user import User
 
 
 class UserService:
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -56,4 +56,8 @@ class UserService:
         return user
 
     async def delete_user(self, user_id: int) -> bool:
+        return await user_repo.delete_one(self.db, user_id)
+
+    async def self_delete(self, user_id: int) -> bool:
+        self._ensure_self(user_id)
         return await user_repo.delete_one(self.db, user_id)
