@@ -55,4 +55,5 @@ class UserSelfUpdate(BaseModel):
 
 
 class UserPasswordChange(BaseModel):
-    new_password: str = Field(min_length=6, max_length=255)
+    old_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=6)

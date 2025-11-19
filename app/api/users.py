@@ -9,12 +9,15 @@ from sqlalchemy import exc as sa_exc
 
 from starlette.responses import Response
 
+from app.core.deps import get_current_user
+from app.core.errors import Forbidden, NotFound
+from app.models import User
 from app.schemas.user import (
     UserCreate,
     UserUpdate,
     UserOut,
     UsersListResponse,
-    UserDetailResponse
+    UserDetailResponse, UserPasswordChange
 )
 
 from app.services.deps import get_user_service, user_service_dep
@@ -72,26 +75,65 @@ async def create_user(
         raise HTTPException(status_code=500, detail="Failed to create user")
 
 
-@router.patch("/{user_id}", response_model=UserOut)
-async def update_user(
-    user_id: int,
+@router.patch("/me", response_model=UserOut)
+async def update_own_profile(
     payload: UserUpdate,
     svc: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        user = await svc.update_user(user_id, payload)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        user = await svc.update_user(current_user.id, payload)
         return UserOut.model_validate(user)
     except sa_exc.SQLAlchemyError as exc:
-        logger.exception("Failed to update user id=: {}", (user_id, exc))
-        raise HTTPException(status_code=500, detail="Failed to update user")
+        logger.exception(
+            "Failed to update own profile for user id=: {}",
+            (current_user.id, exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update user",
+        )
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(
-    user_id: int,
-    svc: UserService = Depends(user_service_dep)
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_own_profile(
+    svc: UserService = Depends(user_service_dep),
+    current_user: User = Depends(get_current_user),
 ):
-    await svc.delete_user(user_id=user_id)
+    await svc.delete_user(user_id=current_user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_own_password(
+    payload: UserPasswordChange,
+    svc: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        await svc.change_password(
+            current_user=current_user,
+            old_password=payload.old_password,
+            new_password=payload.new_password,
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    except Forbidden as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        )
+    except NotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    except sa_exc.SQLAlchemyError as exc:
+        logger.exception(
+            "Failed to change password for user id=: {}",
+            (current_user.id, exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to change password",
+        )
