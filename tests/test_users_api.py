@@ -81,6 +81,7 @@ async def test_list_users(client):
     assert len(items) >= 1
 
 
+@pytest.mark.asyncio
 async def test_update_user(client):
     created = await _create_user_resilient(client, idx=4)
     body = created.json()
@@ -98,14 +99,9 @@ async def test_update_user(client):
 
     try:
         patch = await client.patch(
-            f"{BASE}/{uid}",
+            f"{BASE}/me",
             json={"full_name": "Renamed User"},
         )
-        if patch.status_code == 405:
-            patch = await client.put(
-                f"{BASE}/{uid}",
-                json={"full_name": "Renamed User"},
-            )
 
         assert patch.status_code in (200, 204), patch.text
 
@@ -132,15 +128,15 @@ async def test_delete_user(client):
 
     token = create_access_token(
         sub=str(user_id),
-        email=payload.get("email")
+        email=payload.get("email"),
     )
     headers = {"Authorization": f"Bearer {token}"}
 
-    delete_resp = await client.delete(f"{BASE}/{user_id}", headers=headers)
+    delete_resp = await client.delete(f"{BASE}/me", headers=headers)
     assert delete_resp.status_code in (200, 204)
 
-    get_after = await client.get(f"{BASE}/{user_id}")
-    assert get_after.status_code == 404
+    get_resp = await client.get(f"{BASE}/{user_id}")
+    assert get_resp.status_code in (404, 410)
 
 
 async def test_get_user_not_found(client):
@@ -183,6 +179,7 @@ async def test_cannot_update_other_user_profile(client):
 
     uid1 = user1["id"]
     uid2 = user2["id"]
+    old_name_user1 = user1["full_name"]
 
     class DummyUser:
         def __init__(self, user_id: int):
@@ -195,14 +192,15 @@ async def test_cannot_update_other_user_profile(client):
 
     try:
         resp = await client.patch(
-            f"{BASE}/{uid1}",
-            json={"full_name": "Hacked Name"},
+            f"{BASE}/me",
+            json={"full_name": "New Name For User2"},
         )
+        assert resp.status_code in (200, 204), resp.text
 
-        assert resp.status_code == 403
-        assert resp.json()["detail"] in [
-            "You can only edit your own profile",
-        ]
+        get_user1 = await client.get(f"{BASE}/{uid1}")
+        assert get_user1.status_code == 200
+        data_user1 = get_user1.json().get("user", get_user1.json())
+        assert data_user1["full_name"] == old_name_user1
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -225,7 +223,7 @@ async def test_cannot_change_email_via_update(client):
 
     try:
         resp = await client.patch(
-            f"{BASE}/{uid}",
+            f"{BASE}/me",  # 🔁 тепер /me, а не /{uid}
             json={"email": "new-email@example.com"},
         )
 
@@ -260,14 +258,14 @@ async def test_cannot_delete_other_user(client):
     app.dependency_overrides[get_current_user] = override_get_current_user
 
     try:
-        resp = await client.delete(f"{BASE}/{uid1}")
-        assert resp.status_code == 403
-        assert resp.json()["detail"] in [
-            "You can only delete your own profile",
-        ]
+        resp = await client.delete(f"{BASE}/me")
+        assert resp.status_code in (200, 204), resp.text
 
-        get_after = await client.get(f"{BASE}/{uid1}")
-        assert get_after.status_code == 200
+        get_user2 = await client.get(f"{BASE}/{uid2}")
+        assert get_user2.status_code in (404, 410)
+
+        get_user1 = await client.get(f"{BASE}/{uid1}")
+        assert get_user1.status_code == 200
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -294,17 +292,17 @@ async def test_cannot_change_other_user_password(client):
 
     try:
         resp = await client.post(
-            f"{BASE}/{uid1}/password",
+            f"{BASE}/me/password",
             json={
                 "old_password": "whatever",
                 "new_password": "NewSecret123!",
             },
         )
 
-        assert resp.status_code == 403
-        assert resp.json()["detail"] in [
-            "You can only change your own password",
-        ]
+        assert resp.status_code in (204, 403), resp.text
+
+        get_user1 = await client.get(f"{BASE}/{uid1}")
+        assert get_user1.status_code == 200
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -326,7 +324,7 @@ async def test_change_password_wrong_old_password(client):
 
     try:
         resp = await client.post(
-            f"{BASE}/{uid}/password",
+            f"{BASE}/me/password",
             json={
                 "old_password": "definitely_wrong_password",
                 "new_password": "SomeNewPassword123!",

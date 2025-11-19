@@ -71,13 +71,10 @@ class UserService:
     async def change_password(
             self,
             current_user: User,
-            user_id: int,
             old_password: str,
             new_password: str,
     ) -> User:
-
-        if current_user.id != user_id:
-            raise Forbidden("You can only change your own password")
+        user_id = current_user.id
 
         user = await user_repo.get_by_id(self.db, user_id)
         if not user:
