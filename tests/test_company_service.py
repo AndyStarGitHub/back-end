@@ -50,14 +50,20 @@ class FakeCompanyRepository:
         obj = self._store.get(obj_id)
         if obj is None:
             return None
-        for k, v in values.items():
-            setattr(obj, k, v)
+        for ki, valu in values.items():
+            setattr(obj, ki, valu)
         return obj
 
     async def delete_one(self, db, obj_id):
         return self._store.pop(obj_id, None) is not None
 
-    async def get_public_paginated(self, db, *, offset: int = 0, limit: int = 50):
+    async def get_public_paginated(
+            self,
+            db,
+            *,
+            offset: int = 0,
+            limit: int = 50
+    ):
         items = [c for c in self._store.values() if c.visibility == "public"]
         total = len(items)
         slice_items = items[offset : offset + limit]
@@ -148,10 +154,11 @@ async def test_non_owner_cannot_see_hidden_company(service: CompanyService):
 
 
 @pytest.mark.anyio
-async def test_list_public_companies_returns_only_public(service: CompanyService):
+async def test_list_public_companies_returns_only_public(
+        service: CompanyService
+):
     user = DummyUser(id=1)
 
-    # Створюємо одну hidden і одну public компанію
     hidden = await service.create_company(
         db=None,
         current_user=user,
@@ -182,7 +189,9 @@ async def test_list_public_companies_returns_only_public(service: CompanyService
 
 
 @pytest.mark.anyio
-async def test_list_my_companies_returns_only_user_companies(service: CompanyService):
+async def test_list_my_companies_returns_only_user_companies(
+        service: CompanyService
+):
     user1 = DummyUser(id=1)
     user2 = DummyUser(id=2)
 

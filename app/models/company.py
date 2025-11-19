@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
+
 class CompanyVisibilityEnum(str):
     HIDDEN = "hidden"
     PUBLIC = "public"
@@ -24,7 +25,6 @@ class Company(Base):
 
     name = Column(String(255), nullable=False)
     description = Column(String, nullable=True)
-
     visibility = Column(
         String(20),
         nullable=False,

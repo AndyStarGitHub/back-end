@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.models.company import Company
-from app.repositories.base import BaseRepository  # підправ імпорт під свій шлях
+from app.repositories.base import BaseRepository
 
 
 class CompanyRepository(BaseRepository[Company]):

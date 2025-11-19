@@ -14,9 +14,11 @@ from app.schemas.company import (
     CompanyListResponse,
 )
 
+
 router = APIRouter()
 
 service = CompanyService()
+
 
 @router.post(
     "",
@@ -28,15 +30,12 @@ async def create_company(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ) -> CompanyRead:
-    """
-    Створити нову компанію. Потрібна авторизація.
-    Поточний користувач стає власником (owner).
-    """
     return await service.create_company(
         db,
         current_user=current_user,
         data=data,
     )
+
 
 @router.get(
     "",
@@ -47,15 +46,12 @@ async def list_companies(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ) -> CompanyListResponse:
-    """
-    Список публічних компаній з пагінацією.
-    Доступно без авторизації.
-    """
     return await service.list_public_companies(
         db,
         offset=offset,
         limit=limit,
     )
+
 
 @router.get(
     "/me",
@@ -67,16 +63,13 @@ async def list_my_companies(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
 ) -> CompanyListResponse:
-    """
-    Список компаній поточного користувача (owner) з пагінацією.
-    Потрібна авторизація.
-    """
     return await service.list_my_companies(
         db,
         current_user=current_user,
         offset=offset,
         limit=limit,
     )
+
 
 @router.get(
     "/{company_id}",
@@ -87,16 +80,12 @@ async def get_company(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ) -> CompanyRead:
-    """
-    Отримати компанію за ID.
-    - Якщо компанія public — побачить будь-який авторизований юзер.
-    - Якщо hidden — тільки owner, іншим 404.
-    """
     return await service.get_company(
         db,
         company_id=company_id,
         current_user=current_user,
     )
+
 
 @router.patch(
     "/{company_id}",
@@ -108,16 +97,13 @@ async def update_company(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ) -> CompanyRead:
-    """
-    Оновити компанію (name/description/visibility).
-    Доступно тільки власнику (owner).
-    """
     return await service.update_company(
         db,
         company_id=company_id,
         current_user=current_user,
         data=data,
     )
+
 
 @router.delete(
     "/{company_id}",
@@ -128,12 +114,8 @@ async def delete_company(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ) -> None:
-    """
-    Видалити компанію. Доступно тільки власнику (owner).
-    """
     await service.delete_company(
         db,
         company_id=company_id,
         current_user=current_user,
     )
-

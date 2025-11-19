@@ -2,6 +2,7 @@ from typing import TypeVar, Generic, Type, Tuple, Optional, Any
 from sqlalchemy import select, update, delete, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 T = TypeVar("T")
 
 

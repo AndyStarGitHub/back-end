@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from uuid import UUID
 from enum import Enum
-
 from pydantic import BaseModel, ConfigDict
 
 

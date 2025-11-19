@@ -13,6 +13,7 @@ from app.schemas.company import (
     CompanyRead,
     CompanyListResponse,
 )
+from app.core.errors import NotFound, Forbidden
 
 
 class CompanyService:
@@ -26,10 +27,6 @@ class CompanyService:
         current_user: Any,
         data: CompanyCreate,
     ) -> CompanyRead:
-        """
-        Створити компанію. Кожен юзер може створювати багато компаній.
-        Owner = current_user.id, visibility за замовчуванням 'hidden'.
-        """
         obj = await self.repo.create_one(
             db,
             name=data.name,
@@ -46,18 +43,12 @@ class CompanyService:
     ):
         company = await self.repo.get_by_id(db, company_id)
         if company is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Company not found",
-            )
+            raise NotFound("Company not found")
         return company
 
     def _ensure_owner(self, company, current_user: Any) -> None:
         if company.owner_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not the owner of this company",
-            )
+            raise Forbidden("You are not the owner of this company")
 
     async def get_company(
         self,
@@ -66,15 +57,11 @@ class CompanyService:
         company_id: UUID,
         current_user: Any | None,
     ) -> CompanyRead:
-        """
-        Якщо компанія public — бачать усі.
-        Якщо hidden — лише owner, іншим 404.
-        """
+
         company = await self._get_company_or_404(db, company_id)
 
         if company.visibility == "hidden":
             if current_user is None or company.owner_id != current_user.id:
-                # Можна 403, але часто краще маскувати як 404
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Company not found",
@@ -90,21 +77,15 @@ class CompanyService:
         current_user: Any,
         data: CompanyUpdate,
     ) -> CompanyRead:
-        """
-        Оновлення name / description / visibility — тільки для owner.
-        """
+
         company = await self._get_company_or_404(db, company_id)
         self._ensure_owner(company, current_user)
 
         values = data.dict(exclude_unset=True)
         obj = await self.repo.update_one(db, company_id, **values)
         if obj is None:
-            # формально не має статись, бо ми вже перевірили існування
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Company not found",
-            )
 
+            raise NotFound("Company not found")
         return CompanyRead.from_orm(obj)
 
     async def delete_company(
@@ -114,19 +95,13 @@ class CompanyService:
         company_id: UUID,
         current_user: Any,
     ) -> None:
-        """
-        Видалення компанії — тільки для owner.
-        """
+
         company = await self._get_company_or_404(db, company_id)
         self._ensure_owner(company, current_user)
 
         deleted = await self.repo.delete_one(db, company_id)
         if not deleted:
-            # на всякий випадок
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Company not found",
-            )
+            raise NotFound("Company not found")
 
     async def list_public_companies(
         self,
@@ -135,9 +110,7 @@ class CompanyService:
         offset: int = 0,
         limit: int = 50,
     ) -> CompanyListResponse:
-        """
-        Список public компаній з пагінацією.
-        """
+
         total, items = await self.repo.get_public_paginated(
             db,
             offset=offset,
@@ -166,7 +139,7 @@ class CompanyService:
         )
         return CompanyListResponse(
             total=total,
-            items=[CompanyRead.from_orm(i) for i in items],
+            items=[CompanyRead.model_validate(i) for i in items],
             offset=offset,
             limit=limit,
         )
