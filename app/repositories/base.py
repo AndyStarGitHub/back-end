@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import TypeVar, Generic, Type, Tuple, Optional, Any
 from sqlalchemy import select, update, delete, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +11,7 @@ class BaseRepository(Generic[T]):
     def __init__(self, model: Type[T]):
         self.model: Type[T] = model
 
-    async def get_by_id(self, db: AsyncSession, obj_id: int) -> T | None:
+    async def get_by_id(self, db: AsyncSession, obj_id: Any) -> T | None:
         res = await db.execute(
             select(self.model).where(self.model.id == obj_id)
         )
@@ -27,12 +25,11 @@ class BaseRepository(Generic[T]):
         return obj
 
     async def update_one(
-            self,
-            db: AsyncSession,
-            obj_id: int,
-            **values
+        self,
+        db: AsyncSession,
+        obj_id: Any,
+        **values
     ) -> T | None:
-
         values = {k: v for k, v in values.items() if v is not None}
         if not values:
             return await self.get_by_id(db, obj_id)
@@ -50,7 +47,7 @@ class BaseRepository(Generic[T]):
         await db.commit()
         return row[0]
 
-    async def delete_one(self, db: AsyncSession, obj_id: int) -> bool:
+    async def delete_one(self, db: AsyncSession, obj_id: Any) -> bool:
         res = await db.execute(
             delete(self.model).where(self.model.id == obj_id)
         )
