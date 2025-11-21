@@ -1,6 +1,7 @@
+from enum import Enum
 from sqlalchemy import String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from enum import Enum
+
 from app.db.database import Base
 from app.models.mixins import UUIDMixin, TimestampedMixin
 
@@ -28,3 +29,21 @@ class Company(UUIDMixin, TimestampedMixin, Base):
     )
 
     owner = relationship("User")
+
+    members = relationship(
+        "CompanyMember",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+
+    join_requests = relationship(
+        "CompanyJoinRequest",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+
+    invitations = relationship(
+        "CompanyInvitation",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
