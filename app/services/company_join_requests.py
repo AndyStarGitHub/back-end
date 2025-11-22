@@ -47,28 +47,32 @@ async def create_join_request(
         select(CompanyJoinRequest).where(
             CompanyJoinRequest.company_id == company.id,
             CompanyJoinRequest.user_id == current_user.id,
-            CompanyJoinRequest.status == CompanyJoinRequestStatusEnum.PENDING.value,
+            CompanyJoinRequest.status == CompanyJoinRequestStatusEnum.PENDING,
         )
     )
     existing_request: CompanyJoinRequest | None = result.scalar_one_or_none()
     if existing_request is not None:
-        raise Forbidden("There is already a pending join request for this company")
+        raise Forbidden(
+            "There is already a pending join request for this company"
+        )
 
     result = await db.execute(
         select(CompanyInvitation).where(
             CompanyInvitation.company_id == company.id,
             CompanyInvitation.invited_user_id == current_user.id,
-            CompanyInvitation.status == CompanyInvitationStatusEnum.PENDING.value,
+            CompanyInvitation.status == CompanyInvitationStatusEnum.PENDING,
         )
     )
     existing_invitation: CompanyInvitation | None = result.scalar_one_or_none()
     if existing_invitation is not None:
-        raise Forbidden("There is already a pending invitation from this company")
+        raise Forbidden(
+            "There is already a pending invitation from this company"
+        )
 
     join_request = CompanyJoinRequest(
         company_id=company.id,
         user_id=current_user.id,
-        status=CompanyJoinRequestStatusEnum.PENDING.value,
+        status=CompanyJoinRequestStatusEnum.PENDING,
     )
 
     db.add(join_request)
@@ -85,7 +89,9 @@ async def cancel_join_request(
 ) -> CompanyJoinRequest:
 
     result = await db.execute(
-        select(CompanyJoinRequest).where(CompanyJoinRequest.id == join_request_id)
+        select(CompanyJoinRequest).where(
+            CompanyJoinRequest.id == join_request_id
+        )
     )
     join_request: CompanyJoinRequest | None = result.scalar_one_or_none()
     if join_request is None:
@@ -94,10 +100,10 @@ async def cancel_join_request(
     if join_request.user_id != current_user.id:
         raise Forbidden("Only request owner can cancel this join request")
 
-    if join_request.status != CompanyJoinRequestStatusEnum.PENDING.value:
+    if join_request.status != CompanyJoinRequestStatusEnum.PENDING:
         raise Forbidden("Only pending join requests can be canceled")
 
-    join_request.status = CompanyJoinRequestStatusEnum.CANCELED.value
+    join_request.status = CompanyJoinRequestStatusEnum.CANCELED
 
     db.add(join_request)
     await db.commit()
@@ -113,7 +119,9 @@ async def approve_join_request(
 ) -> CompanyJoinRequest:
 
     result = await db.execute(
-        select(CompanyJoinRequest).where(CompanyJoinRequest.id == join_request_id)
+        select(CompanyJoinRequest).where(
+            CompanyJoinRequest.id == join_request_id
+        )
     )
     join_request: CompanyJoinRequest | None = result.scalar_one_or_none()
     if join_request is None:
@@ -131,7 +139,7 @@ async def approve_join_request(
     if company.owner_id != current_user.id:
         raise Forbidden("Only company owner can approve join requests")
 
-    if join_request.status != CompanyJoinRequestStatusEnum.PENDING.value:
+    if join_request.status != CompanyJoinRequestStatusEnum.PENDING:
         raise Forbidden("Only pending join requests can be approved")
 
     user_id = join_request.user_id
@@ -150,12 +158,12 @@ async def approve_join_request(
         select(CompanyInvitation).where(
             CompanyInvitation.company_id == company_id,
             CompanyInvitation.invited_user_id == user_id,
-            CompanyInvitation.status == CompanyInvitationStatusEnum.PENDING.value,
+            CompanyInvitation.status == CompanyInvitationStatusEnum.PENDING,
         )
     )
     pending_invitation: CompanyInvitation | None = result.scalar_one_or_none()
     if pending_invitation is not None:
-        pending_invitation.status = CompanyInvitationStatusEnum.CANCELED.value
+        pending_invitation.status = CompanyInvitationStatusEnum.CANCELED
         db.add(pending_invitation)
 
     membership = CompanyMember(
@@ -164,7 +172,7 @@ async def approve_join_request(
     )
     db.add(membership)
 
-    join_request.status = CompanyJoinRequestStatusEnum.APPROVED.value
+    join_request.status = CompanyJoinRequestStatusEnum.APPROVED
     db.add(join_request)
 
     await db.commit()
@@ -180,7 +188,9 @@ async def reject_join_request(
 ) -> CompanyJoinRequest:
 
     result = await db.execute(
-        select(CompanyJoinRequest).where(CompanyJoinRequest.id == join_request_id)
+        select(CompanyJoinRequest).where(
+            CompanyJoinRequest.id == join_request_id
+        )
     )
     join_request: CompanyJoinRequest | None = result.scalar_one_or_none()
     if join_request is None:
@@ -198,10 +208,10 @@ async def reject_join_request(
     if company.owner_id != current_user.id:
         raise Forbidden("Only company owner can reject join requests")
 
-    if join_request.status != CompanyJoinRequestStatusEnum.PENDING.value:
+    if join_request.status != CompanyJoinRequestStatusEnum.PENDING:
         raise Forbidden("Only pending join requests can be rejected")
 
-    join_request.status = CompanyJoinRequestStatusEnum.REJECTED.value
+    join_request.status = CompanyJoinRequestStatusEnum.REJECTED
 
     db.add(join_request)
     await db.commit()
@@ -244,11 +254,7 @@ async def list_company_join_requests(
     limit: int = 20,
     offset: int = 0,
 ) -> Sequence[CompanyJoinRequest]:
-    """
-    Повертає join requests компанії. Доступно лише для ownerʼа.
-    """
 
-    # 1. Знайти компанію
     result = await db.execute(
         select(Company).where(Company.id == company_id)
     )

@@ -1,101 +1,144 @@
-from typing import Sequence
+from __future__ import annotations
 
-from sqlalchemy import select
+from typing import Sequence
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFound, Forbidden
 from app.models.company import Company
-from app.models.company_member import CompanyMember
 from app.models.user import User
+from app.repositories.company import CompanyRepository
+from app.repositories.company_member import CompanyMemberRepository
+
+
+class CompanyMemberService:
+    def __init__(
+        self,
+        company_repo: CompanyRepository | None = None,
+        member_repo: CompanyMemberRepository | None = None,
+    ) -> None:
+        self.company_repo = company_repo or CompanyRepository()
+        self.member_repo = member_repo or CompanyMemberRepository()
+
+    async def _get_company_or_404(
+        self,
+        db: AsyncSession,
+        company_id: UUID,
+    ) -> Company:
+        company = await self.company_repo.get_by_id(db, company_id)
+        if company is None:
+            raise NotFound("Company not found")
+        return company
+
+    async def remove_member_from_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        member_user_id: int,
+        current_user: User,
+    ) -> None:
+
+        company = await self._get_company_or_404(db, company_id)
+
+        if company.owner_id != current_user.id:
+            raise Forbidden("Only company owner can remove members")
+
+        if member_user_id == company.owner_id:
+            raise Forbidden("Owner cannot be removed from the company")
+
+        membership = await self.member_repo.get_one_for_company_and_user(
+            db,
+            company_id=company.id,
+            user_id=member_user_id,
+        )
+        if membership is None:
+            raise Forbidden("User is not a member of this company")
+
+        await self.member_repo.delete_one(db, membership.id)
+
+    async def leave_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: User,
+    ) -> None:
+
+        company = await self._get_company_or_404(db, company_id)
+
+        if company.owner_id == current_user.id:
+            raise Forbidden("Owner cannot leave the company")
+
+        membership = await self.member_repo.get_one_for_company_and_user(
+            db,
+            company_id=company.id,
+            user_id=current_user.id,
+        )
+        if membership is None:
+            raise Forbidden("User is not a member of this company")
+
+        await self.member_repo.delete_one(db, membership.id)
+
+    async def list_company_members(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Sequence[User]:
+
+        await self._get_company_or_404(db, company_id)
+
+        users = await self.member_repo.list_members_for_company(
+            db,
+            company_id=company_id,
+            offset=offset,
+            limit=limit,
+        )
+        return users
+
+
+member_service = CompanyMemberService()
 
 
 async def remove_member_from_company(
     db: AsyncSession,
-    company_id: str,
+    company_id: UUID,
     member_user_id: int,
     current_user: User,
 ) -> None:
-
-    result = await db.execute(
-        select(Company).where(Company.id == company_id)
+    await member_service.remove_member_from_company(
+        db=db,
+        company_id=company_id,
+        member_user_id=member_user_id,
+        current_user=current_user,
     )
-    company: Company | None = result.scalar_one_or_none()
-    if company is None:
-        raise NotFound("Company not found")
-
-    if company.owner_id != current_user.id:
-        raise Forbidden("Only company owner can remove members")
-
-    if member_user_id == company.owner_id:
-        raise Forbidden("Owner cannot be removed from the company")
-
-    result = await db.execute(
-        select(CompanyMember).where(
-            CompanyMember.company_id == company.id,
-            CompanyMember.user_id == member_user_id,
-        )
-    )
-    membership: CompanyMember | None = result.scalar_one_or_none()
-    if membership is None:
-        raise Forbidden("User is not a member of this company")
-
-    await db.delete(membership)
-    await db.commit()
 
 
 async def leave_company(
     db: AsyncSession,
-    company_id: str,
+    company_id: UUID,
     current_user: User,
 ) -> None:
-
-    result = await db.execute(
-        select(Company).where(Company.id == company_id)
+    await member_service.leave_company(
+        db=db,
+        company_id=company_id,
+        current_user=current_user,
     )
-    company: Company | None = result.scalar_one_or_none()
-    if company is None:
-        raise NotFound("Company not found")
-
-    if company.owner_id == current_user.id:
-        raise Forbidden("Owner cannot leave the company")
-
-    result = await db.execute(
-        select(CompanyMember).where(
-            CompanyMember.company_id == company.id,
-            CompanyMember.user_id == current_user.id,
-        )
-    )
-    membership: CompanyMember | None = result.scalar_one_or_none()
-    if membership is None:
-        raise Forbidden("User is not a member of this company")
-
-    await db.delete(membership)
-    await db.commit()
 
 
 async def list_company_members(
     db: AsyncSession,
-    company_id: str,
+    company_id: UUID,
     limit: int = 20,
     offset: int = 0,
 ) -> Sequence[User]:
-
-    result = await db.execute(
-        select(Company).where(Company.id == company_id)
+    return await member_service.list_company_members(
+        db=db,
+        company_id=company_id,
+        limit=limit,
+        offset=offset,
     )
-    company: Company | None = result.scalar_one_or_none()
-    if company is None:
-        raise NotFound("Company not found")
-
-    stmt = (
-        select(User)
-        .join(CompanyMember, CompanyMember.user_id == User.id)
-        .where(CompanyMember.company_id == company.id)
-        .order_by(User.id)
-        .offset(offset)
-        .limit(limit)
-    )
-
-    result = await db.execute(stmt)
-    users = result.scalars().all()
-    return users

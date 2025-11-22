@@ -1,211 +1,345 @@
-from typing import Sequence
+from __future__ import annotations
 
-from sqlalchemy import select
+from typing import Sequence
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import Forbidden, NotFound
+from app.core.errors import NotFound, Forbidden
 from app.models.company import Company
-from app.models.company_member import CompanyMember
-from app.models.company_invitation import CompanyInvitation, CompanyInvitationStatusEnum
-from app.models.company_join_request import (
-    CompanyJoinRequest,
-    CompanyJoinRequestStatusEnum,
+from app.models.company_invitation import (
+    CompanyInvitation,
+    CompanyInvitationStatusEnum,
 )
+from app.models.company_join_request import CompanyJoinRequestStatusEnum
 from app.models.user import User
+from app.repositories.company import CompanyRepository
+from app.repositories.company_invitation import CompanyInvitationRepository
+from app.repositories.company_member import CompanyMemberRepository
+from app.repositories.company_join_request import CompanyJoinRequestRepository
+from app.repositories.user_repo import UserRepository
+
+
+class CompanyInvitationService:
+    def __init__(
+        self,
+        invitation_repo: CompanyInvitationRepository | None = None,
+        company_repo: CompanyRepository | None = None,
+        member_repo: CompanyMemberRepository | None = None,
+        join_request_repo: CompanyJoinRequestRepository | None = None,
+        user_repo: UserRepository | None = None,
+    ) -> None:
+        self.invitation_repo = invitation_repo or CompanyInvitationRepository()
+        self.company_repo = company_repo or CompanyRepository()
+        self.member_repo = member_repo or CompanyMemberRepository()
+        self.join_request_repo = (join_request_repo
+                                  or
+                                  CompanyJoinRequestRepository())
+        self.user_repo = user_repo or UserRepository()
+
+    async def _get_company_or_404(
+        self,
+        db: AsyncSession,
+        company_id: UUID,
+    ) -> Company:
+        company = await self.company_repo.get_by_id(db, company_id)
+        if company is None:
+            raise NotFound("Company not found")
+        return company
+
+    async def _get_invitation_or_404(
+        self,
+        db: AsyncSession,
+        invitation_id: UUID,
+    ) -> CompanyInvitation:
+        invitation = await self.invitation_repo.get_by_id(db, invitation_id)
+        if invitation is None:
+            raise NotFound("Invitation not found")
+        return invitation
+
+    async def invite_user_to_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        invited_user_id: int,
+        current_user: User,
+    ) -> CompanyInvitation:
+        company = await self._get_company_or_404(db, company_id)
+
+        if company.owner_id != current_user.id:
+            raise Forbidden("Only company owner can invite users")
+
+        if invited_user_id == current_user.id:
+            raise Forbidden("Owner cannot invite himself")
+
+        invited_user = await self._get_user_or_404(db, invited_user_id)
+
+        existing_member = await self.member_repo.get_one_by(
+            db,
+            company_id=company.id,
+            user_id=invited_user.id,
+        )
+        if existing_member is not None:
+            raise Forbidden("User is already a member of this company")
+
+        existing_invitation = await self.invitation_repo.get_pending_for_company_and_user(
+            db,
+            company_id=company.id,
+            invited_user_id=invited_user.id,
+        )
+        if existing_invitation is not None:
+            raise Forbidden(
+                "There is already a pending invitation for this user"
+            )
+
+        existing_join_request = await self.join_request_repo.get_one_by(
+            db,
+            company_id=company.id,
+            user_id=invited_user.id,
+            status=CompanyJoinRequestStatusEnum.PENDING,
+        )
+        if existing_join_request is not None:
+            raise Forbidden(
+                "User already has a pending join request for this company"
+            )
+
+        invitation = await self.invitation_repo.create_one(
+            db,
+            company_id=company.id,
+            invited_user_id=invited_user.id,
+            invited_by_id=current_user.id,
+            status=CompanyInvitationStatusEnum.PENDING,
+        )
+
+        return invitation
+
+    async def _get_user_or_404(
+            self,
+            db: AsyncSession,
+            user_id: int,
+    ) -> User:
+        user = await self.user_repo.get_by_id(db, user_id)
+        if user is None:
+            raise NotFound("Invited user not found")
+        return user
+
+    async def cancel_invitation(
+        self,
+        db: AsyncSession,
+        *,
+        invitation_id: UUID,
+        current_user: User,
+    ) -> CompanyInvitation:
+        invitation = await self._get_invitation_or_404(db, invitation_id)
+        company = invitation.company
+
+        if company.owner_id != current_user.id:
+            raise Forbidden("Only company owner can cancel invitations")
+
+        if invitation.status != CompanyInvitationStatusEnum.PENDING:
+            raise Forbidden("Only pending invitations can be canceled")
+
+        updated = await self.invitation_repo.update_one(
+            db,
+            invitation_id,
+            status=CompanyInvitationStatusEnum.CANCELED,
+        )
+
+        if updated is None:
+            raise NotFound("Invitation not found")
+
+        return updated
+
+    async def accept_invitation(
+        self,
+        db: AsyncSession,
+        *,
+        invitation_id: UUID,
+        current_user: User,
+    ) -> CompanyInvitation:
+        invitation = await self._get_invitation_or_404(db, invitation_id)
+
+        if invitation.invited_user_id != current_user.id:
+            raise Forbidden("Only invited user can accept this invitation")
+
+        if invitation.status != CompanyInvitationStatusEnum.PENDING:
+            raise Forbidden("Only pending invitations can be accepted")
+
+        company_id = invitation.company_id
+
+        existing_member = await self.member_repo.get_one_by(
+            db,
+            company_id=company_id,
+            user_id=current_user.id,
+        )
+        if existing_member is not None:
+            raise Forbidden("User is already a member of this company")
+
+        existing_join_request = await self.join_request_repo.get_one_by(
+            db,
+            company_id=company_id,
+            user_id=current_user.id,
+            status=CompanyJoinRequestStatusEnum.PENDING,
+        )
+        if existing_join_request is not None:
+            await self.join_request_repo.update_one(
+                db,
+                existing_join_request.id,
+                status=CompanyJoinRequestStatusEnum.CANCELED,
+            )
+
+        await self.member_repo.create_one(
+            db,
+            company_id=company_id,
+            user_id=current_user.id,
+        )
+
+        updated = await self.invitation_repo.update_one(
+            db,
+            invitation.id,
+            status=CompanyInvitationStatusEnum.ACCEPTED,
+        )
+        if updated is None:
+            raise NotFound("Invitation not found")
+
+        return updated
+
+    async def decline_invitation(
+        self,
+        db: AsyncSession,
+        *,
+        invitation_id: UUID,
+        current_user: User,
+    ) -> CompanyInvitation:
+        invitation = await self._get_invitation_or_404(db, invitation_id)
+
+        if invitation.invited_user_id != current_user.id:
+            raise Forbidden("Only invited user can decline this invitation")
+
+        if invitation.status != CompanyInvitationStatusEnum.PENDING:
+            raise Forbidden("Only pending invitations can be declined")
+
+        updated = await self.invitation_repo.update_one(
+            db,
+            invitation.id,
+            status=CompanyInvitationStatusEnum.DECLINED,
+        )
+        if updated is None:
+            raise NotFound("Invitation not found")
+
+        return updated
+
+    async def list_my_invitations(
+        self,
+        db: AsyncSession,
+        *,
+        current_user: User,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Sequence[CompanyInvitation]:
+
+        status_enum: CompanyInvitationStatusEnum | None = None
+        if status is not None:
+            try:
+                status_enum = CompanyInvitationStatusEnum(status)
+            except ValueError:
+                # невідомий статус – повертаємо порожній список
+                return []
+
+        invitations = await self.invitation_repo.list_for_user(
+            db,
+            user_id=current_user.id,
+            status=status_enum,
+            offset=offset,
+            limit=limit,
+        )
+        return invitations
+
+    async def list_company_invitations(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: User,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Sequence[CompanyInvitation]:
+        company = await self._get_company_or_404(db, company_id)
+
+        if company.owner_id != current_user.id:
+            raise Forbidden("Only company owner can view company invitations")
+
+        status_enum: CompanyInvitationStatusEnum | None = None
+        if status is not None:
+            try:
+                status_enum = CompanyInvitationStatusEnum(status)
+            except ValueError:
+                return []
+
+        invitations = await self.invitation_repo.list_for_company(
+            db,
+            company_id=company.id,
+            status=status_enum,
+            offset=offset,
+            limit=limit,
+        )
+        return invitations
+
+
+invitation_service = CompanyInvitationService()
 
 
 async def invite_user_to_company(
     db: AsyncSession,
-    company_id: str,
+    company_id: UUID,
     invited_user_id: int,
     current_user: User,
 ) -> CompanyInvitation:
-
-    result = await db.execute(
-        select(Company).where(Company.id == company_id)
-    )
-    company: Company | None = result.scalar_one_or_none()
-    if company is None:
-        raise NotFound("Company not found")
-
-    if company.owner_id != current_user.id:
-        raise Forbidden("Only company owner can invite users")
-
-    if invited_user_id == current_user.id:
-        raise Forbidden("Owner cannot invite himself")
-
-    result = await db.execute(
-        select(User).where(User.id == invited_user_id)
-    )
-    invited_user: User | None = result.scalar_one_or_none()
-    if invited_user is None:
-        raise NotFound("Invited user not found")
-
-    result = await db.execute(
-        select(CompanyMember).where(
-            CompanyMember.company_id == company.id,
-            CompanyMember.user_id == invited_user_id,
-        )
-    )
-    existing_member: CompanyMember | None = result.scalar_one_or_none()
-    if existing_member is not None:
-        raise Forbidden("User is already a member of this company")
-
-    result = await db.execute(
-        select(CompanyInvitation).where(
-            CompanyInvitation.company_id == company.id,
-            CompanyInvitation.invited_user_id == invited_user_id,
-            CompanyInvitation.status == CompanyInvitationStatusEnum.PENDING.value,
-        )
-    )
-    existing_invitation: CompanyInvitation | None = result.scalar_one_or_none()
-    if existing_invitation is not None:
-        raise Forbidden("There is already a pending invitation for this user")
-
-    result = await db.execute(
-        select(CompanyJoinRequest).where(
-            CompanyJoinRequest.company_id == company.id,
-            CompanyJoinRequest.user_id == invited_user_id,
-            CompanyJoinRequest.status == CompanyJoinRequestStatusEnum.PENDING.value,
-        )
-    )
-    existing_join_request: CompanyJoinRequest | None = result.scalar_one_or_none()
-    if existing_join_request is not None:
-        raise Forbidden("User already has a pending join request for this company")
-
-    invitation = CompanyInvitation(
-        company_id=company.id,
+    return await invitation_service.invite_user_to_company(
+        db=db,
+        company_id=company_id,
         invited_user_id=invited_user_id,
-        invited_by_id=current_user.id,
-        status=CompanyInvitationStatusEnum.PENDING.value,
+        current_user=current_user,
     )
-
-    db.add(invitation)
-    await db.commit()
-    await db.refresh(invitation)
-
-    return invitation
 
 
 async def cancel_invitation(
     db: AsyncSession,
-    invitation_id: str,
+    invitation_id: UUID,
     current_user: User,
 ) -> CompanyInvitation:
-
-    result = await db.execute(
-        select(CompanyInvitation).where(CompanyInvitation.id == invitation_id)
+    return await invitation_service.cancel_invitation(
+        db=db,
+        invitation_id=invitation_id,
+        current_user=current_user,
     )
-    invitation: CompanyInvitation | None = result.scalar_one_or_none()
-    if invitation is None:
-        raise NotFound("Invitation not found")
-
-    result = await db.execute(
-        select(Company).where(Company.id == invitation.company_id)
-    )
-    company: Company | None = result.scalar_one_or_none()
-    if company is None:
-        raise NotFound("Company not found")
-
-    if company.owner_id != current_user.id:
-        raise Forbidden("Only company owner can cancel invitations")
-
-    if invitation.status != CompanyInvitationStatusEnum.PENDING.value:
-        raise Forbidden("Only pending invitations can be canceled")
-
-    invitation.status = CompanyInvitationStatusEnum.CANCELED.value
-
-    db.add(invitation)
-    await db.commit()
-    await db.refresh(invitation)
-
-    return invitation
 
 
 async def accept_invitation(
     db: AsyncSession,
-    invitation_id: str,
+    invitation_id: UUID,
     current_user: User,
 ) -> CompanyInvitation:
-
-    result = await db.execute(
-        select(CompanyInvitation).where(CompanyInvitation.id == invitation_id)
+    return await invitation_service.accept_invitation(
+        db=db,
+        invitation_id=invitation_id,
+        current_user=current_user,
     )
-    invitation: CompanyInvitation | None = result.scalar_one_or_none()
-    if invitation is None:
-        raise NotFound("Invitation not found")
-
-    if invitation.invited_user_id != current_user.id:
-        raise Forbidden("Only invited user can accept this invitation")
-
-    if invitation.status != CompanyInvitationStatusEnum.PENDING.value:
-        raise Forbidden("Only pending invitations can be accepted")
-
-    company_id = invitation.company_id
-
-    result = await db.execute(
-        select(CompanyMember).where(
-            CompanyMember.company_id == company_id,
-            CompanyMember.user_id == current_user.id,
-        )
-    )
-    existing_member: CompanyMember | None = result.scalar_one_or_none()
-    if existing_member is not None:
-        raise Forbidden("User is already a member of this company")
-
-    result = await db.execute(
-        select(CompanyJoinRequest).where(
-            CompanyJoinRequest.company_id == company_id,
-            CompanyJoinRequest.user_id == current_user.id,
-            CompanyJoinRequest.status == CompanyJoinRequestStatusEnum.PENDING.value,
-        )
-    )
-    existing_join_request: CompanyJoinRequest | None = result.scalar_one_or_none()
-    if existing_join_request is not None:
-        existing_join_request.status = CompanyJoinRequestStatusEnum.CANCELED.value
-        db.add(existing_join_request)
-
-    membership = CompanyMember(
-        company_id=company_id,
-        user_id=current_user.id,
-    )
-    db.add(membership)
-
-    invitation.status = CompanyInvitationStatusEnum.ACCEPTED.value
-    db.add(invitation)
-
-    await db.commit()
-    await db.refresh(invitation)
-
-    return invitation
 
 
 async def decline_invitation(
     db: AsyncSession,
-    invitation_id: str,
+    invitation_id: UUID,
     current_user: User,
 ) -> CompanyInvitation:
-
-    result = await db.execute(
-        select(CompanyInvitation).where(CompanyInvitation.id == invitation_id)
+    return await invitation_service.decline_invitation(
+        db=db,
+        invitation_id=invitation_id,
+        current_user=current_user,
     )
-    invitation: CompanyInvitation | None = result.scalar_one_or_none()
-    if invitation is None:
-        raise NotFound("Invitation not found")
-
-    if invitation.invited_user_id != current_user.id:
-        raise Forbidden("Only invited user can decline this invitation")
-
-    if invitation.status != CompanyInvitationStatusEnum.PENDING.value:
-        raise Forbidden("Only pending invitations can be declined")
-
-    invitation.status = CompanyInvitationStatusEnum.DECLINED.value
-
-    db.add(invitation)
-    await db.commit()
-    await db.refresh(invitation)
-
-    return invitation
 
 
 async def list_my_invitations(
@@ -214,58 +348,29 @@ async def list_my_invitations(
     status: str | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> Sequence[CompanyInvitation]:
-
-    stmt = select(CompanyInvitation).where(
-        CompanyInvitation.invited_user_id == current_user.id
+):
+    return await invitation_service.list_my_invitations(
+        db=db,
+        current_user=current_user,
+        status=status,
+        limit=limit,
+        offset=offset,
     )
-
-    if status is not None:
-        stmt = stmt.where(CompanyInvitation.status == status)
-
-    stmt = (
-        stmt.order_by(CompanyInvitation.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-
-    result = await db.execute(stmt)
-    invitations = result.scalars().all()
-    return invitations
 
 
 async def list_company_invitations(
     db: AsyncSession,
-    company_id: str,
+    company_id: UUID,
     current_user: User,
     status: str | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> Sequence[CompanyInvitation]:
-
-    result = await db.execute(
-        select(Company).where(Company.id == company_id)
+):
+    return await invitation_service.list_company_invitations(
+        db=db,
+        company_id=company_id,
+        current_user=current_user,
+        status=status,
+        limit=limit,
+        offset=offset,
     )
-    company: Company | None = result.scalar_one_or_none()
-    if company is None:
-        raise NotFound("Company not found")
-
-    if company.owner_id != current_user.id:
-        raise Forbidden("Only company owner can view company invitations")
-
-    stmt = select(CompanyInvitation).where(
-        CompanyInvitation.company_id == company.id
-    )
-
-    if status is not None:
-        stmt = stmt.where(CompanyInvitation.status == status)
-
-    stmt = (
-        stmt.order_by(CompanyInvitation.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-
-    result = await db.execute(stmt)
-    invitations = result.scalars().all()
-    return invitations

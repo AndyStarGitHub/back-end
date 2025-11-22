@@ -53,4 +53,3 @@ class User(IdMixin, TimestampedMixin, Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
-

@@ -1,5 +1,5 @@
 from enum import Enum
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -31,9 +31,13 @@ class CompanyInvitation(UUIDMixin, TimestampedMixin, Base):
         nullable=False,
     )
 
-    status: Mapped[str] = mapped_column(
-        String(20),
-        default=CompanyInvitationStatusEnum.PENDING.value,
+    status: Mapped[CompanyInvitationStatusEnum] = mapped_column(
+        SAEnum(
+            CompanyInvitationStatusEnum,
+            name="company_invitation_status",
+            native_enum=False,
+        ),
+        default=CompanyInvitationStatusEnum.PENDING,
         nullable=False,
     )
 

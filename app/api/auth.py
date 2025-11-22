@@ -1,5 +1,5 @@
 from loguru import logger
-from fastapi import APIRouter, Depends, status, Request
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
