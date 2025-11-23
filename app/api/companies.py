@@ -9,6 +9,7 @@ from app.core.deps import get_db, get_current_user
 from app.models import User
 from app.services import company_admin_service
 from app.services.company import CompanyService
+from app.services.quiz import QuizService
 from app.schemas.company import (
     CompanyCreate,
     CompanyUpdate,
@@ -16,11 +17,18 @@ from app.schemas.company import (
     CompanyListResponse,
     CompanyAdminOut,
 )
+from app.schemas.quiz import (
+    QuizCreate,
+    QuizUpdate,
+    QuizRead,
+    QuizListResponse,
+)
 
 
 router = APIRouter()
 
 service = CompanyService()
+quiz_service = QuizService()
 
 
 @router.post(
@@ -168,6 +176,102 @@ async def remove_user_admin(
         db,
         company_id=company_id,
         member_user_id=user_id,
+        current_user=current_user,
+    )
+    return
+
+
+@router.post(
+    "/{company_id}/quizzes",
+    response_model=QuizRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_quiz_for_company(
+    company_id: UUID,
+    data: QuizCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> QuizRead:
+    return await quiz_service.create_quiz(
+        db,
+        company_id=company_id,
+        current_user=current_user,
+        data=data,
+    )
+
+
+@router.get(
+    "/{company_id}/quizzes",
+    response_model=QuizListResponse,
+)
+async def list_company_quizzes(
+    company_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+) -> QuizListResponse:
+    return await quiz_service.list_quizzes_for_company(
+        db,
+        company_id=company_id,
+        current_user=current_user,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/{company_id}/quizzes/{quiz_id}",
+    response_model=QuizRead,
+)
+async def get_company_quiz(
+    company_id: UUID,
+    quiz_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> QuizRead:
+    return await quiz_service.get_quiz(
+        db,
+        company_id=company_id,
+        quiz_id=quiz_id,
+        current_user=current_user,
+    )
+
+
+@router.patch(
+    "/{company_id}/quizzes/{quiz_id}",
+    response_model=QuizRead,
+)
+async def update_company_quiz(
+    company_id: UUID,
+    quiz_id: UUID,
+    data: QuizUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> QuizRead:
+    return await quiz_service.update_quiz(
+        db,
+        company_id=company_id,
+        quiz_id=quiz_id,
+        current_user=current_user,
+        data=data,
+    )
+
+
+@router.delete(
+    "/{company_id}/quizzes/{quiz_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_company_quiz(
+    company_id: UUID,
+    quiz_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    await quiz_service.delete_quiz(
+        db,
+        company_id=company_id,
+        quiz_id=quiz_id,
         current_user=current_user,
     )
     return

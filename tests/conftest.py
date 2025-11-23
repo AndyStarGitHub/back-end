@@ -18,6 +18,7 @@ from typing import Callable
 
 from app.models.user import User
 from app.models.company import Company, CompanyVisibilityEnum
+from app.models.company_member import CompanyMember, CompanyMemberRoleEnum
 
 
 @pytest.fixture
@@ -160,3 +161,25 @@ async def company_factory(
         return company
 
     return _create_company
+
+
+@pytest.fixture()
+async def company_member_factory(
+    db_session: AsyncSession,
+) -> Callable[..., "CompanyMember"]:
+    async def _create_company_member(
+        company: Company,
+        user: User,
+        role: CompanyMemberRoleEnum = CompanyMemberRoleEnum.MEMBER,
+    ) -> CompanyMember:
+        member = CompanyMember(
+            company_id=company.id,
+            user_id=user.id,
+            role=role,
+        )
+        db_session.add(member)
+        await db_session.commit()
+        await db_session.refresh(member)
+        return member
+
+    return _create_company_member
