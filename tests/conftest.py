@@ -14,6 +14,12 @@ from app.main import app
 from app.db.database import Base, get_db
 
 
+from typing import Callable
+
+from app.models.user import User
+from app.models.company import Company, CompanyVisibilityEnum
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -104,3 +110,53 @@ def stub_password_hash(monkeypatch):
             )
     except Exception:
         pass
+
+
+@pytest.fixture()
+async def user_factory(db_session: AsyncSession) -> Callable[..., User]:
+    async def _create_user(
+        email: str = "user@example.com",
+        hashed_password: str = "hashed::test",
+        is_active: bool = True,
+        **extra,
+    ) -> User:
+        user = User(
+            email=email,
+            hashed_password=hashed_password,
+            is_active=is_active,
+            **extra,
+        )
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+        return user
+
+    return _create_user
+
+
+@pytest.fixture()
+async def company_factory(
+    db_session: AsyncSession,
+    user_factory: Callable[..., User],
+) -> Callable[..., Company]:
+    async def _create_company(
+        owner: User | None = None,
+        name: str = "Test Company",
+        description: str = "Test description",
+        visibility: str = CompanyVisibilityEnum.PUBLIC.value,
+    ) -> Company:
+        if owner is None:
+            owner = await user_factory()
+
+        company = Company(
+            name=name,
+            description=description,
+            visibility=visibility,
+            owner_id=owner.id,
+        )
+        db_session.add(company)
+        await db_session.commit()
+        await db_session.refresh(company)
+        return company
+
+    return _create_company

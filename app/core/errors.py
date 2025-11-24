@@ -60,5 +60,3 @@ class Conflict(AppError):
 
 class TokenDecodeError(Exception):
     ...
-
-
