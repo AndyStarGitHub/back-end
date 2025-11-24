@@ -4,10 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import Forbidden
 from app.models.company_join_request import CompanyJoinRequestStatusEnum
 from app.models.company_member import CompanyMember
-from app.services.company_join_requests import (
-    create_join_request,
-    approve_join_request,
-)
+from app.services.company_join_requests import join_request_service
 
 
 pytestmark = pytest.mark.anyio
@@ -22,7 +19,7 @@ async def test_user_can_create_join_request(
     user = await user_factory(email="user@example.com")
     company = await company_factory(owner=owner)
 
-    join_request = await create_join_request(
+    join_request = await join_request_service.create_join_request(
         db=db_session,
         company_id=company.id,
         current_user=user,
@@ -42,7 +39,7 @@ async def test_owner_cannot_create_join_request_for_own_company(
     company = await company_factory(owner=owner)
 
     with pytest.raises(Forbidden):
-        await create_join_request(
+        await join_request_service.create_join_request(
             db=db_session,
             company_id=company.id,
             current_user=owner,
@@ -58,14 +55,14 @@ async def test_cannot_create_duplicate_pending_join_request(
     user = await user_factory(email="user@example.com")
     company = await company_factory(owner=owner)
 
-    await create_join_request(
+    await join_request_service.create_join_request(
         db=db_session,
         company_id=company.id,
         current_user=user,
     )
 
     with pytest.raises(Forbidden):
-        await create_join_request(
+        await join_request_service.create_join_request(
             db=db_session,
             company_id=company.id,
             current_user=user,
@@ -81,13 +78,13 @@ async def test_owner_can_approve_join_request_and_member_is_created(
     user = await user_factory(email="user@example.com")
     company = await company_factory(owner=owner)
 
-    join_request = await create_join_request(
+    join_request = await join_request_service.create_join_request(
         db=db_session,
         company_id=company.id,
         current_user=user,
     )
 
-    approved = await approve_join_request(
+    approved = await join_request_service.approve_join_request(
         db=db_session,
         join_request_id=join_request.id,  # <-- важливо
         current_user=owner,

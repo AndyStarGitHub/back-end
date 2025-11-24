@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import Forbidden
 from app.models.company_invitation import CompanyInvitationStatusEnum
 from app.models.company_member import CompanyMember
-from app.services.company_invitations import invite_user_to_company
+from app.services.company_invitations import invitation_service
 
 
 pytestmark = pytest.mark.anyio
@@ -19,7 +19,7 @@ async def test_owner_can_invite_user(
     invited = await user_factory(email="invited@example.com")
     company = await company_factory(owner=owner)
 
-    invitation = await invite_user_to_company(
+    invitation = await invitation_service.invite_user_to_company(
         db=db_session,
         company_id=company.id,
         invited_user_id=invited.id,
@@ -42,7 +42,7 @@ async def test_non_owner_cannot_invite_user(
     company = await company_factory(owner=owner)
 
     with pytest.raises(Forbidden):
-        await invite_user_to_company(
+        await invitation_service.invite_user_to_company(
             db=db_session,
             company_id=company.id,
             invited_user_id=invited.id,
@@ -64,7 +64,7 @@ async def test_cannot_invite_existing_member(
     await db_session.commit()
 
     with pytest.raises(Forbidden):
-        await invite_user_to_company(
+        await invitation_service.invite_user_to_company(
             db=db_session,
             company_id=company.id,
             invited_user_id=member.id,
@@ -81,7 +81,7 @@ async def test_cannot_create_duplicate_pending_invitation(
     invited = await user_factory(email="invited@example.com")
     company = await company_factory(owner=owner)
 
-    await invite_user_to_company(
+    await invitation_service.invite_user_to_company(
         db=db_session,
         company_id=company.id,
         invited_user_id=invited.id,
@@ -89,7 +89,7 @@ async def test_cannot_create_duplicate_pending_invitation(
     )
 
     with pytest.raises(Forbidden):
-        await invite_user_to_company(
+        await invitation_service.invite_user_to_company(
             db=db_session,
             company_id=company.id,
             invited_user_id=invited.id,

@@ -10,14 +10,8 @@ from app.schemas.company_join_requests import (
     CompanyJoinRequestCreate,
     CompanyJoinRequestRead,
 )
-from app.services.company_join_requests import (
-    create_join_request,
-    cancel_join_request,
-    approve_join_request,
-    reject_join_request,
-    list_my_join_requests,
-    list_company_join_requests,
-)
+from app.services.company_join_requests import join_request_service
+
 
 router = APIRouter()
 
@@ -33,7 +27,7 @@ async def create_company_join_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    join_request = await create_join_request(
+    join_request = await join_request_service.create_join_request(
         db=db,
         company_id=company_id,
         current_user=current_user,
@@ -50,7 +44,7 @@ async def cancel_company_join_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    join_request = await cancel_join_request(
+    join_request = await join_request_service.cancel_join_request(
         db=db,
         join_request_id=join_request_id,
         current_user=current_user,
@@ -67,7 +61,7 @@ async def approve_company_join_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    join_request = await approve_join_request(
+    join_request = await join_request_service.approve_join_request(
         db=db,
         join_request_id=join_request_id,
         current_user=current_user,
@@ -84,7 +78,7 @@ async def reject_company_join_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    join_request = await reject_join_request(
+    join_request = await join_request_service.reject_join_request(
         db=db,
         join_request_id=join_request_id,
         current_user=current_user,
@@ -103,7 +97,7 @@ async def get_my_join_requests(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    join_requests = await list_my_join_requests(
+    join_requests = await join_request_service.list_my_join_requests(
         db=db,
         current_user=current_user,
         status=status_filter,
@@ -125,7 +119,7 @@ async def get_company_join_requests(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    join_requests = await list_company_join_requests(
+    join_requests = await join_request_service.list_company_join_requests(
         db=db,
         company_id=company_id,
         current_user=current_user,
