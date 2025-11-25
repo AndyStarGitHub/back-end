@@ -137,7 +137,7 @@ async def delete_company(
     response_model=list[CompanyAdminOut],
 )
 async def get_company_admins(
-    company_id: str,  # або UUID
+    company_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -149,36 +149,44 @@ async def get_company_admins(
     return admins
 
 
-@router.post("/{company_id}/admins/{user_id}", status_code=204)
+@router.post(
+    "/{company_id}/admins/{user_id}",
+    response_model=CompanyAdminOut,
+    status_code=status.HTTP_200_OK,
+)
 async def make_user_admin(
-    company_id: str,
+    company_id: UUID,
     user_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await company_admin_service.assign_admin(
+) -> CompanyAdminOut:
+    user = await company_admin_service.assign_admin(
         db,
         company_id=company_id,
         member_user_id=user_id,
         current_user=current_user,
     )
-    return
+    return user
 
 
-@router.delete("/{company_id}/admins/{user_id}", status_code=204)
+@router.delete(
+    "/{company_id}/admins/{user_id}",
+    response_model=CompanyAdminOut,
+    status_code=status.HTTP_200_OK,
+)
 async def remove_user_admin(
-    company_id: str,
+    company_id: UUID,
     user_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    await company_admin_service.remove_admin(
+) -> CompanyAdminOut:
+    user = await company_admin_service.remove_admin(
         db,
         company_id=company_id,
         member_user_id=user_id,
         current_user=current_user,
     )
-    return
+    return user
 
 
 @router.post(
@@ -274,4 +282,3 @@ async def delete_company_quiz(
         quiz_id=quiz_id,
         current_user=current_user,
     )
-    return
