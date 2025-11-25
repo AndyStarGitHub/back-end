@@ -22,6 +22,9 @@ from app.schemas.quiz import (
     QuizUpdate,
     QuizRead,
     QuizListResponse,
+    QuizAttemptRead,
+    UserQuizStats,
+    QuizSubmit,
 )
 
 
@@ -275,3 +278,53 @@ async def delete_company_quiz(
         current_user=current_user,
     )
     return
+
+
+@router.post(
+    "/{company_id}/quizzes/{quiz_id}/attempts",
+    response_model=QuizAttemptRead,
+)
+async def submit_quiz_attempt(
+    company_id: UUID,
+    quiz_id: UUID,
+    data: QuizSubmit,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> QuizAttemptRead:
+    return await quiz_service.submit_quiz(
+        db,
+        company_id=company_id,
+        quiz_id=quiz_id,
+        current_user=current_user,
+        data=data,
+    )
+
+
+@router.get(
+    "/{company_id}/me/quiz-stats",
+    response_model=UserQuizStats,
+)
+async def get_my_company_quiz_stats(
+    company_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserQuizStats:
+    return await quiz_service.get_user_stats_for_company(
+        db,
+        company_id=company_id,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/me/quiz-stats",
+    response_model=UserQuizStats,
+)
+async def get_my_global_quiz_stats(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserQuizStats:
+    return await quiz_service.get_user_stats_global(
+        db,
+        current_user=current_user,
+    )

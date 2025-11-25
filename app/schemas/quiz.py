@@ -79,7 +79,8 @@ class QuizListResponse(BaseModel):
     limit: int
 
 
-# ---------- Quiz attempts: submit answers ----------
+class QuizSubmit(BaseModel):
+    answers: list[QuizAnswerSubmit]
 
 
 class QuizAnswerSubmit(BaseModel):
@@ -105,4 +106,3 @@ class UserQuizStats(BaseModel):
     total_correct_answers: int
     average_score: float
     last_attempt_at: datetime | None = None
-
