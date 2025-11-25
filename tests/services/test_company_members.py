@@ -3,11 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import Forbidden
 from app.models.company_member import CompanyMember
-from app.services.company_members import (
-    list_company_members,
-    remove_member_from_company,
-    leave_company,
-)
+from app.services.company_members import member_service
 
 
 pytestmark = pytest.mark.anyio
@@ -27,7 +23,7 @@ async def test_list_company_members_returns_users(
     db_session.add(CompanyMember(company_id=company.id, user_id=user2.id))
     await db_session.commit()
 
-    users = await list_company_members(
+    users = await member_service.list_company_members(
         db=db_session,
         company_id=company.id,
         limit=10,
@@ -51,7 +47,7 @@ async def test_owner_can_remove_member(
     db_session.add(CompanyMember(company_id=company.id, user_id=member.id))
     await db_session.commit()
 
-    await remove_member_from_company(
+    await member_service.remove_member_from_company(
         db=db_session,
         company_id=company.id,
         member_user_id=member.id,
@@ -81,7 +77,7 @@ async def test_non_owner_cannot_remove_member(
     await db_session.commit()
 
     with pytest.raises(Forbidden):
-        await remove_member_from_company(
+        await member_service.remove_member_from_company(
             db=db_session,
             company_id=company.id,
             member_user_id=member.id,
@@ -101,7 +97,7 @@ async def test_user_can_leave_company(
     db_session.add(CompanyMember(company_id=company.id, user_id=member.id))
     await db_session.commit()
 
-    await leave_company(
+    await member_service.leave_company(
         db=db_session,
         company_id=company.id,
         current_user=member,
@@ -125,7 +121,7 @@ async def test_owner_cannot_leave_company(
     company = await company_factory(owner=owner)
 
     with pytest.raises(Forbidden):
-        await leave_company(
+        await member_service.leave_company(
             db=db_session,
             company_id=company.id,
             current_user=owner,
