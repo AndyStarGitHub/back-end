@@ -40,3 +40,12 @@ class CompanyListResponse(BaseModel):
     items: list[CompanyRead]
     offset: int
     limit: int
+
+
+class CompanyAdminOut(BaseModel):
+    id: int
+    email: str
+    full_name: str | None = None
+
+    class Config:
+        orm_mode = True

@@ -1,8 +1,15 @@
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, UniqueConstraint, Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
 from app.models.mixins import UUIDMixin, TimestampedMixin
+
+from enum import Enum
+
+
+class CompanyMemberRoleEnum(str, Enum):
+    MEMBER = "member"
+    ADMIN = "admin"
 
 
 class CompanyMember(UUIDMixin, TimestampedMixin, Base):
@@ -10,6 +17,16 @@ class CompanyMember(UUIDMixin, TimestampedMixin, Base):
 
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    role: Mapped[CompanyMemberRoleEnum] = mapped_column(
+        SqlEnum(
+            CompanyMemberRoleEnum,
+            name="company_member_role",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=CompanyMemberRoleEnum.MEMBER,
         nullable=False,
     )
 
