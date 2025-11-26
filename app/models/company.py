@@ -47,3 +47,9 @@ class Company(UUIDMixin, TimestampedMixin, Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+
+    quizzes = relationship(
+        "Quiz",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
