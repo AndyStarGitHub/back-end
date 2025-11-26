@@ -245,7 +245,6 @@ class CompanyInvitationService:
             try:
                 status_enum = CompanyInvitationStatusEnum(status)
             except ValueError:
-                # невідомий статус – повертаємо порожній список
                 return []
 
         invitations = await self.invitation_repo.list_for_user(
@@ -290,87 +289,3 @@ class CompanyInvitationService:
 
 
 invitation_service = CompanyInvitationService()
-
-
-async def invite_user_to_company(
-    db: AsyncSession,
-    company_id: UUID,
-    invited_user_id: int,
-    current_user: User,
-) -> CompanyInvitation:
-    return await invitation_service.invite_user_to_company(
-        db=db,
-        company_id=company_id,
-        invited_user_id=invited_user_id,
-        current_user=current_user,
-    )
-
-
-async def cancel_invitation(
-    db: AsyncSession,
-    invitation_id: UUID,
-    current_user: User,
-) -> CompanyInvitation:
-    return await invitation_service.cancel_invitation(
-        db=db,
-        invitation_id=invitation_id,
-        current_user=current_user,
-    )
-
-
-async def accept_invitation(
-    db: AsyncSession,
-    invitation_id: UUID,
-    current_user: User,
-) -> CompanyInvitation:
-    return await invitation_service.accept_invitation(
-        db=db,
-        invitation_id=invitation_id,
-        current_user=current_user,
-    )
-
-
-async def decline_invitation(
-    db: AsyncSession,
-    invitation_id: UUID,
-    current_user: User,
-) -> CompanyInvitation:
-    return await invitation_service.decline_invitation(
-        db=db,
-        invitation_id=invitation_id,
-        current_user=current_user,
-    )
-
-
-async def list_my_invitations(
-    db: AsyncSession,
-    current_user: User,
-    status: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-):
-    return await invitation_service.list_my_invitations(
-        db=db,
-        current_user=current_user,
-        status=status,
-        limit=limit,
-        offset=offset,
-    )
-
-
-async def list_company_invitations(
-    db: AsyncSession,
-    company_id: UUID,
-    current_user: User,
-    status: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-):
-    return await invitation_service.list_company_invitations(
-        db=db,
-        company_id=company_id,
-        current_user=current_user,
-        status=status,
-        limit=limit,
-        offset=offset,
-    )
