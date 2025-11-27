@@ -1,19 +1,23 @@
 from loguru import logger
 from typing import Dict, Any
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 import jwt
 from jwt import PyJWTError
 from jwt.exceptions import PyJWKClientError
+from redis.asyncio import Redis
 
 from app.core.auth0 import verify_auth0_token, extract_email
 from app.core.errors import TokenDecodeError, InvalidCredentials, Forbidden
 from app.db.database import get_db
 from app.models import User
+from app.repositories.quiz_redis import QuizRedisRepository
 from app.repositories.user_repo import user_repo
 from app.services.auth_service import AuthService, decode_access_token
+from app.services.quiz import QuizService
+from app.services.redis_client import get_redis
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -151,3 +155,10 @@ async def get_current_user(
         return user
 
     raise InvalidCredentials("Unknown auth source")
+
+
+async def get_quiz_service(
+    redis: Redis = Depends(get_redis),
+) -> QuizService:
+    quiz_redis_repo = QuizRedisRepository(redis)
+    return QuizService(quiz_redis_repo=quiz_redis_repo)

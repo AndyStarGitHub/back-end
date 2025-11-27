@@ -28,6 +28,8 @@ from app.schemas.quiz import (
     UserQuizStats,
 )
 
+from app.repositories.quiz_redis import QuizRedisRepository
+
 
 class QuizService:
     def __init__(
@@ -36,6 +38,7 @@ class QuizService:
         company_repo: CompanyRepository | None = None,
         company_member_repo: CompanyMemberRepository | None = None,
         quiz_attempt_repo: QuizAttemptRepository | None = None,
+        quiz_redis_repo: QuizRedisRepository | None = None,
     ) -> None:
         self.quiz_repo = quiz_repo or QuizRepository()
         self.company_repo = company_repo or CompanyRepository()
@@ -43,6 +46,7 @@ class QuizService:
             company_member_repo or CompanyMemberRepository()
         )
         self.quiz_attempt_repo = quiz_attempt_repo or QuizAttemptRepository()
+        self.quiz_redis_repo = quiz_redis_repo
 
     async def _get_company_or_404(
         self,
@@ -329,6 +333,12 @@ class QuizService:
             correct_answers=correct_answers,
             answers=answers_data,
         )
+
+        if self.quiz_redis_repo is not None:
+            try:
+                await self.quiz_redis_repo.save_attempt(attempt)
+            except Exception:
+                pass
 
         return QuizAttemptRead.model_validate(attempt)
 
