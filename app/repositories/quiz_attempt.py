@@ -8,7 +8,6 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.quiz import QuizAnswerOption
 from app.models.quiz_attempt import (
     QuizAttempt,
     QuizAttemptAnswer,
@@ -40,9 +39,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         db: AsyncSession,
         attempt_id: UUID,
     ) -> QuizAttempt | None:
-        """
-        Отримати спробу разом з відповідями і обраними опціями.
-        """
+
         result = await db.execute(
             select(QuizAttempt)
             .where(QuizAttempt.id == attempt_id)
@@ -65,10 +62,6 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         correct_answers: int,
         answers: list[QuizAttemptAnswerData],
     ) -> QuizAttempt:
-        """
-        Створити спробу проходження квізу разом з відповідями по питаннях
-        та обраними варіантами.
-        """
 
         attempt = QuizAttempt(
             user_id=user_id,
@@ -105,10 +98,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         user_id: int,
         company_id: UUID,
     ) -> UserQuizStatsData:
-        """
-        Агрегована статистика користувача по конкретній компанії.
-        Базується на сумі total_questions / correct_answers зі всіх спроб.
-        """
+
         result = await db.execute(
             select(
                 func.coalesce(func.sum(QuizAttempt.total_questions), 0),
@@ -133,9 +123,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         *,
         user_id: int,
     ) -> UserQuizStatsData:
-        """
-        Агрегована статистика користувача по всій системі (всі компанії).
-        """
+
         result = await db.execute(
             select(
                 func.coalesce(func.sum(QuizAttempt.total_questions), 0),

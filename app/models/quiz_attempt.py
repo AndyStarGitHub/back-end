@@ -27,11 +27,9 @@ class QuizAttempt(UUIDMixin, TimestampedMixin, Base):
         nullable=False,
     )
 
-    # агреговані значення по цій спробі
     total_questions: Mapped[int] = mapped_column(nullable=False)
     correct_answers: Mapped[int] = mapped_column(nullable=False)
 
-    # relationships
     user = relationship("User")
     company = relationship("Company")
     quiz = relationship("Quiz", back_populates="attempts")
@@ -56,7 +54,6 @@ class QuizAttemptAnswer(UUIDMixin, TimestampedMixin, Base):
         nullable=False,
     )
 
-    # чи відповідь на це питання була повністю правильною
     is_correct: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

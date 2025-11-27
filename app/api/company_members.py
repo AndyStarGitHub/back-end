@@ -9,11 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
 from app.models.user import User
 from app.schemas.company_members import CompanyMemberUser
-from app.services.company_members import (
-    list_company_members,
-    remove_member_from_company,
-    leave_company,
-)
+from app.services.company_members import member_service
+
 
 router = APIRouter()
 
@@ -29,7 +26,7 @@ async def get_company_members(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    users = await list_company_members(
+    users = await member_service.list_company_members(
         db=db,
         company_id=company_id,
         limit=limit,
@@ -48,7 +45,7 @@ async def remove_company_member(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await remove_member_from_company(
+    await member_service.remove_member_from_company(
         db=db,
         company_id=company_id,
         member_user_id=user_id,
@@ -65,7 +62,7 @@ async def leave_company_endpoint(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await leave_company(
+    await member_service.leave_company(
         db=db,
         company_id=company_id,
         current_user=current_user,

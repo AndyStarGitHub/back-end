@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from uuid import UUID
 
-from sqlalchemy import String, ForeignKey, Boolean
+from sqlalchemy import String, ForeignKey, Boolean, Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -23,9 +23,13 @@ class Quiz(UUIDMixin, TimestampedMixin, Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String(255))
 
-    frequency: Mapped[str] = mapped_column(
-        String(20),
-        default=QuizFrequencyEnum.MONTHLY.value,
+    frequency: Mapped[QuizFrequencyEnum] = mapped_column(
+        SqlEnum(
+            QuizFrequencyEnum,
+            name="quiz_frequency_enum",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=QuizFrequencyEnum.MONTHLY,
         nullable=False,
     )
 
