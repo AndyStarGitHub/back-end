@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_user
+
 from app.models import User
 from app.services import company_admin_service
 from app.services.company import CompanyService
@@ -27,6 +29,8 @@ from app.schemas.quiz import (
     QuizSubmit,
 )
 
+
+ExportFormat = Literal["json", "csv"]
 
 router = APIRouter()
 
@@ -285,7 +289,6 @@ async def delete_company_quiz(
         quiz_id=quiz_id,
         current_user=current_user,
     )
-    return
 
 
 @router.post(
