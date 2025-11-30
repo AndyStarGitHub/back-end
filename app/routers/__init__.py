@@ -7,7 +7,14 @@ from app.api.auth import router as auth_router
 from app.api.companies import router as companies_router
 from app.api.company_invitations import router as company_invitations_router
 from app.api.company_members import router as company_members_router
-from app.api.company_join_requests import router as company_join_requests_router
+from app.api.company_join_requests import (
+    router as company_join_requests_router
+)
+from app.api.quizzes import router as quizzes_router
+from app.api.quiz_analytics import router as quiz_analytics_router
+from app.api.company_quiz_analytics import (
+    router as company_quiz_analytics_router,
+)
 
 
 api_router = APIRouter(prefix="/api/v1")
@@ -51,6 +58,21 @@ api_router.include_router(
     company_join_requests_router,
     prefix="/company-join-requests",
     tags=["company-join-requests"]
+)
+api_router.include_router(
+    quizzes_router,
+    prefix="/me/quiz",
+    tags=["quizzes"],
+)
+api_router.include_router(
+    quiz_analytics_router,
+    prefix="/me/quiz_analytics",
+    tags=["quiz-analytics"],
+)
+api_router.include_router(
+    company_quiz_analytics_router,
+    prefix="/companies/{company_id}/quiz-analytics",
+    tags=["company-quiz-analytics"],
 )
 
 

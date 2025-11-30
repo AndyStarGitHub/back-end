@@ -29,6 +29,19 @@ from app.schemas.quiz import (
     UserQuizStats,
 )
 
+from app.schemas.quiz_analytics import (
+    UserQuizAverageList,
+    UserQuizAverageInRange,
+    UserQuizLastAttemptList,
+    UserQuizLastAttempt,
+    CompanyWeeklyStats,
+    CompanyWeeklyStatsItem,
+    CompanyUserQuizWeeklyStats,
+    CompanyUserQuizWeeklyItem,
+    CompanyUsersLastAttemptList,
+    CompanyUserLastAttempt,
+)
+
 from app.repositories.quiz_redis import QuizRedisRepository
 
 
@@ -503,6 +516,15 @@ class QuizService:
             last_attempt_at=stats.last_attempt_at,
         )
 
+    async def get_user_overall_rating(
+        self,
+        db: AsyncSession,
+        *,
+        current_user: Any,
+    ) -> UserQuizStats:
+
+        return await self.get_user_stats_global(db, current_user=current_user)
+
     async def export_my_attempts_for_company(
         self,
         db: AsyncSession,
@@ -609,4 +631,216 @@ class QuizService:
             company_id=company.id,
             user_id=None,
             quiz_id=quiz_id,
+        )
+
+    async def get_user_quiz_average_scores(
+        self,
+        db: AsyncSession,
+        *,
+        current_user: Any,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        company_id: UUID | None = None,
+    ) -> UserQuizAverageList:
+
+        user_id = current_user.id
+
+        rows = await self.quiz_attempt_repo.get_user_quiz_aggregates_in_range(
+            db,
+            user_id=user_id,
+            start=start,
+            end=end,
+            company_id=company_id,
+        )
+
+        items: list[UserQuizAverageInRange] = []
+
+        for row in rows:
+            if row.total_questions > 0:
+                average = row.total_correct_answers / row.total_questions
+            else:
+                average = 0.0
+
+            items.append(
+                UserQuizAverageInRange(
+                    quiz_id=row.quiz_id,
+                    company_id=row.company_id,
+                    average_score=average,
+                    total_questions=row.total_questions,
+                    total_correct_answers=row.total_correct_answers,
+                    attempts_count=row.attempts_count,
+                    period_from=start,
+                    period_to=end,
+                )
+            )
+
+        return UserQuizAverageList(
+            user_id=user_id,
+            items=items,
+        )
+
+    async def get_user_quiz_last_attempts(
+        self,
+        db: AsyncSession,
+        *,
+        current_user: Any,
+        company_id: UUID | None = None,
+    ) -> UserQuizLastAttemptList:
+
+        user_id = current_user.id
+
+        rows = await self.quiz_attempt_repo.get_user_quiz_last_attempts(
+            db,
+            user_id=user_id,
+            company_id=company_id,
+        )
+
+        items: list[UserQuizLastAttempt] = [
+            UserQuizLastAttempt(
+                quiz_id=row.quiz_id,
+                company_id=row.company_id,
+                last_attempt_at=row.last_attempt_at,
+            )
+            for row in rows
+        ]
+
+        return UserQuizLastAttemptList(
+            user_id=user_id,
+            items=items,
+        )
+
+    async def get_company_weekly_stats(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> CompanyWeeklyStats:
+
+        company = await self._get_company_or_404(db, company_id)
+
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        rows = await self.quiz_attempt_repo.get_company_weekly_aggregates(
+            db,
+            company_id=company.id,
+            start=start,
+            end=end,
+        )
+
+        items: list[CompanyWeeklyStatsItem] = []
+
+        for row in rows:
+            if row.total_questions > 0:
+                average = row.total_correct_answers / row.total_questions
+            else:
+                average = 0.0
+
+            items.append(
+                CompanyWeeklyStatsItem(
+                    week_start=row.week_start,
+                    average_score=average,
+                    total_questions=row.total_questions,
+                    total_correct_answers=row.total_correct_answers,
+                    attempts_count=row.attempts_count,
+                )
+            )
+
+        return CompanyWeeklyStats(
+            company_id=company.id,
+            items=items,
+        )
+
+    async def get_company_user_quiz_weekly_stats(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        target_user_id: int,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> CompanyUserQuizWeeklyStats:
+
+        company = await self._get_company_or_404(db, company_id)
+
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        rows = (
+            await self.quiz_attempt_repo.get_company_user_quiz_weekly_aggregates(
+                db,
+                company_id=company.id,
+                user_id=target_user_id,
+                start=start,
+                end=end,
+            )
+        )
+
+        items: list[CompanyUserQuizWeeklyItem] = []
+
+        for row in rows:
+            if row.total_questions > 0:
+                average = row.total_correct_answers / row.total_questions
+            else:
+                average = 0.0
+
+            items.append(
+                CompanyUserQuizWeeklyItem(
+                    quiz_id=row.quiz_id,
+                    week_start=row.week_start,
+                    average_score=average,
+                    total_questions=row.total_questions,
+                    total_correct_answers=row.total_correct_answers,
+                    attempts_count=row.attempts_count,
+                )
+            )
+
+        return CompanyUserQuizWeeklyStats(
+            company_id=company.id,
+            user_id=target_user_id,
+            items=items,
+        )
+
+    async def get_company_users_last_attempts(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+    ) -> CompanyUsersLastAttemptList:
+
+        company = await self._get_company_or_404(db, company_id)
+
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        rows = await self.quiz_attempt_repo.get_company_users_last_attempts(
+            db,
+            company_id=company.id,
+        )
+
+        items: list[CompanyUserLastAttempt] = [
+            CompanyUserLastAttempt(
+                user_id=row.user_id,
+                last_attempt_at=row.last_attempt_at,
+            )
+            for row in rows
+        ]
+
+        return CompanyUsersLastAttemptList(
+            company_id=company.id,
+            items=items,
         )
