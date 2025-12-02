@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -169,6 +170,104 @@ class QuizService:
             )
 
         return total_questions, correct_answers, answer_data_list
+
+    async def _get_attempt_payloads_from_redis(
+        self,
+        attempts: list["QuizAttempt"],
+    ) -> list[dict]:
+
+        if self.quiz_redis_repo is None:
+            return []
+
+        payloads: list[dict] = []
+
+        for attempt in attempts:
+            data = await self.quiz_redis_repo.get_attempt(attempt.id)
+            if data is not None:
+                payloads.append(data)
+
+        return payloads
+
+    def _build_csv_export(
+        self,
+        attempt_payloads: list[dict],
+    ) -> str:
+
+        import csv
+        import io
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        writer.writerow(
+            [
+                "attempt_id",
+                "attempt_created_at",
+                "user_id",
+                "company_id",
+                "quiz_id",
+                "question_id",
+                "is_correct",
+                "selected_option_ids",
+            ]
+        )
+
+        for payload in attempt_payloads:
+            attempt_id = payload.get("attempt_id")
+            created_at = payload.get("created_at")
+            user_id = payload.get("user_id")
+            company_id = payload.get("company_id")
+            quiz_id = payload.get("quiz_id")
+
+            answers = payload.get("answers") or []
+            for ans in answers:
+                question_id = ans.get("question_id")
+                is_correct = ans.get("is_correct")
+                selected_option_ids = ans.get("selected_option_ids") or []
+
+                selected_joined = "|".join(selected_option_ids)
+
+                writer.writerow(
+                    [
+                        attempt_id,
+                        created_at,
+                        user_id,
+                        company_id,
+                        quiz_id,
+                        question_id,
+                        is_correct,
+                        selected_joined,
+                    ]
+                )
+
+        return output.getvalue()
+
+    async def _export_attempts(
+        self,
+        attempts: list["QuizAttempt"],
+        *,
+        format: Literal["json", "csv"],
+        company_id: UUID,
+        user_id: int | None = None,
+        quiz_id: UUID | None = None,
+    ):
+
+        payloads = await self._get_attempt_payloads_from_redis(attempts)
+
+        if format == "json":
+            return {
+                "company_id": str(company_id),
+                "filter": {
+                    "user_id": user_id,
+                    "quiz_id": str(quiz_id) if quiz_id is not None else None,
+                },
+                "attempts": payloads,
+            }
+
+        if format == "csv":
+            return self._build_csv_export(payloads)
+
+        raise ValueError("Unsupported export format. Use 'json' or 'csv'.")
 
     async def create_quiz(
         self,
@@ -402,4 +501,112 @@ class QuizService:
             total_correct_answers=stats.total_correct_answers,
             average_score=average,
             last_attempt_at=stats.last_attempt_at,
+        )
+
+    async def export_my_attempts_for_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        format: Literal["json", "csv"] = "json",
+        quiz_id: UUID | None = None,
+    ):
+
+        company = await self._get_company_or_404(db, company_id)
+
+        since = datetime.utcnow() - timedelta(hours=48)
+
+        attempts_seq = await self.quiz_attempt_repo.get_attempts_for_company_and_user(
+            db,
+            company_id=company.id,
+            user_id=current_user.id,
+            since=since,
+            quiz_id=quiz_id,
+        )
+
+        attempts = list(attempts_seq)
+
+        return await self._export_attempts(
+            attempts,
+            format=format,
+            company_id=company.id,
+            user_id=current_user.id,
+            quiz_id=quiz_id,
+        )
+
+    async def export_user_attempts_for_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        target_user_id: int,
+        format: Literal["json", "csv"] = "json",
+        quiz_id: UUID | None = None,
+    ):
+
+        company = await self._get_company_or_404(db, company_id)
+
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        since = datetime.utcnow() - timedelta(hours=48)
+
+        attempts_seq = await self.quiz_attempt_repo.get_attempts_for_company_and_user(
+            db,
+            company_id=company.id,
+            user_id=target_user_id,
+            since=since,
+            quiz_id=quiz_id,
+        )
+
+        attempts = list(attempts_seq)
+
+        return await self._export_attempts(
+            attempts,
+            format=format,
+            company_id=company.id,
+            user_id=target_user_id,
+            quiz_id=quiz_id,
+        )
+
+    async def export_company_attempts(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        format: Literal["json", "csv"] = "json",
+        quiz_id: UUID | None = None,
+    ):
+
+        company = await self._get_company_or_404(db, company_id)
+
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        since = datetime.utcnow() - timedelta(hours=48)
+
+        attempts_seq = await self.quiz_attempt_repo.get_attempts_for_company(
+            db,
+            company_id=company.id,
+            since=since,
+            quiz_id=quiz_id,
+        )
+
+        attempts = list(attempts_seq)
+
+        return await self._export_attempts(
+            attempts,
+            format=format,
+            company_id=company.id,
+            user_id=None,
+            quiz_id=quiz_id,
         )

@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
+from typing import Sequence
 
-from sqlalchemy import select, func
+
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -140,3 +142,59 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
             total_correct_answers=int(total_correct or 0),
             last_attempt_at=last_attempt_at,
         )
+
+    async def get_attempts_for_company_and_user(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        user_id: int,
+        since: datetime | None = None,
+        quiz_id: UUID | None = None,
+    ) -> Sequence[QuizAttempt]:
+
+        conditions = [
+            QuizAttempt.company_id == company_id,
+            QuizAttempt.user_id == user_id,
+        ]
+
+        if quiz_id is not None:
+            conditions.append(QuizAttempt.quiz_id == quiz_id)
+
+        if since is not None:
+            conditions.append(QuizAttempt.created_at >= since)
+
+        stmt = (
+            select(QuizAttempt)
+            .where(and_(*conditions))
+            .order_by(QuizAttempt.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    async def get_attempts_for_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        since: datetime | None = None,
+        quiz_id: UUID | None = None,
+    ) -> Sequence[QuizAttempt]:
+
+        conditions = [QuizAttempt.company_id == company_id]
+
+        if quiz_id is not None:
+            conditions.append(QuizAttempt.quiz_id == quiz_id)
+
+        if since is not None:
+            conditions.append(QuizAttempt.created_at >= since)
+
+        stmt = (
+            select(QuizAttempt)
+            .where(and_(*conditions))
+            .order_by(QuizAttempt.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.scalars().all()
