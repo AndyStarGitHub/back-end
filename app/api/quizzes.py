@@ -1,5 +1,5 @@
 from typing import Literal
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,15 +15,23 @@ router = APIRouter(
 )
 
 
+from fastapi import Response
+from fastapi.responses import JSONResponse
+
 def _build_export_http_response(
     *,
     format: ExportFormat,
     result,
     filename: str,
-) -> Response | dict:
+) -> Response:
 
     if format == "json":
-        return result
+        return JSONResponse(
+            content=result,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            },
+        )
 
     return Response(
         content=result,
@@ -52,7 +60,8 @@ async def export_my_quiz_attempts(
         quiz_id=quiz_id,
     )
 
-    filename = f"quiz_export_my_{company_id}.csv"
+    filename = f"quiz_export_my_{company_id}.{format}"
+
     return _build_export_http_response(
         format=format,
         result=result,
@@ -80,7 +89,7 @@ async def export_user_quiz_attempts(
         quiz_id=quiz_id,
     )
 
-    filename = f"quiz_export_user_{user_id}_company_{company_id}.csv"
+    filename = f"quiz_export_user_{user_id}_company_{company_id}.{format}"
     return _build_export_http_response(
         format=format,
         result=result,
@@ -106,7 +115,7 @@ async def export_company_quiz_attempts(
         quiz_id=quiz_id,
     )
 
-    filename = f"quiz_export_company_{company_id}.csv"
+    filename = f"quiz_export_company_{company_id}.{format}"
     return _build_export_http_response(
         format=format,
         result=result,
