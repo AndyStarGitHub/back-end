@@ -6,12 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, ANY
 
 from app.services.quiz import QuizService
-from app.repositories.quiz_attempt import (
-    QuizAttemptRepository,
-    CompanyWeeklyStatsRow,
-    CompanyUserQuizWeeklyRow,
-    CompanyUserLastAttemptRow,
-)
+from app.repositories.quiz_attempt import QuizAttemptRepository
 
 
 @pytest.mark.asyncio
@@ -37,12 +32,7 @@ async def test_get_company_weekly_stats_computes_average_and_checks_permissions(
 
     week_start = datetime(2025, 11, 3)
     quiz_attempt_repo_mock.get_company_weekly_aggregates.return_value = [
-        CompanyWeeklyStatsRow(
-            week_start=week_start,
-            total_questions=10,
-            total_correct_answers=7,
-            attempts_count=3,
-        )
+        (week_start, 10, 7, 3),
     ]
 
     current_user = SimpleNamespace(id=1)
@@ -101,12 +91,7 @@ async def test_get_company_weekly_stats_handles_zero_questions():
 
     week_start = datetime(2025, 11, 10)
     quiz_attempt_repo_mock.get_company_weekly_aggregates.return_value = [
-        CompanyWeeklyStatsRow(
-            week_start=week_start,
-            total_questions=0,
-            total_correct_answers=0,
-            attempts_count=1,
-        )
+        (week_start, 0, 0, 1),
     ]
 
     current_user = SimpleNamespace(id=1)
@@ -151,13 +136,7 @@ async def test_get_company_user_quiz_weekly_stats_uses_repo_and_computes_average
     week_start = datetime(2025, 11, 17)
 
     quiz_attempt_repo_mock.get_company_user_quiz_weekly_aggregates.return_value = [
-        CompanyUserQuizWeeklyRow(
-            quiz_id=quiz_id,
-            week_start=week_start,
-            total_questions=5,
-            total_correct_answers=4,
-            attempts_count=2,
-        )
+        (quiz_id, week_start, 5, 4, 2),
     ]
 
     current_user = SimpleNamespace(id=1)
@@ -221,8 +200,8 @@ async def test_get_company_users_last_attempts_maps_rows_correctly_and_checks_pe
     last2 = datetime(2025, 11, 26, 15, 30, 0)
 
     quiz_attempt_repo_mock.get_company_users_last_attempts.return_value = [
-        CompanyUserLastAttemptRow(user_id=1, last_attempt_at=last1),
-        CompanyUserLastAttemptRow(user_id=2, last_attempt_at=last2),
+        (1, last1),
+        (2, last2),
     ]
 
     current_user = SimpleNamespace(id=999)

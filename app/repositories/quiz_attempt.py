@@ -25,57 +25,6 @@ class QuizAttemptAnswerData:
     selected_option_ids: list[UUID]
 
 
-@dataclass
-class UserQuizStatsData:
-    total_questions_answered: int
-    total_correct_answers: int
-    last_attempt_at: datetime | None
-
-
-@dataclass
-class UserQuizAggregateRow:
-
-    quiz_id: UUID
-    company_id: UUID
-    total_questions: int
-    total_correct_answers: int
-    attempts_count: int
-
-
-@dataclass
-class UserQuizLastAttemptRow:
-
-    quiz_id: UUID
-    company_id: UUID
-    last_attempt_at: datetime | None
-
-
-@dataclass
-class CompanyWeeklyStatsRow:
-
-    week_start: datetime
-    total_questions: int
-    total_correct_answers: int
-    attempts_count: int
-
-
-@dataclass
-class CompanyUserQuizWeeklyRow:
-
-    quiz_id: UUID
-    week_start: datetime
-    total_questions: int
-    total_correct_answers: int
-    attempts_count: int
-
-
-@dataclass
-class CompanyUserLastAttemptRow:
-
-    user_id: int
-    last_attempt_at: datetime | None
-
-
 class QuizAttemptRepository(BaseRepository[QuizAttempt]):
     def __init__(self) -> None:
         super().__init__(QuizAttempt)
@@ -143,7 +92,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         *,
         user_id: int,
         company_id: UUID,
-    ) -> UserQuizStatsData:
+    ) -> tuple[int, int, datetime | None]:
 
         result = await db.execute(
             select(
@@ -157,18 +106,14 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         )
         total_q, total_correct, last_attempt_at = result.one()
 
-        return UserQuizStatsData(
-            total_questions_answered=int(total_q or 0),
-            total_correct_answers=int(total_correct or 0),
-            last_attempt_at=last_attempt_at,
-        )
+        return total_q, total_correct, last_attempt_at
 
     async def get_user_stats_global(
         self,
         db: AsyncSession,
         *,
         user_id: int,
-    ) -> UserQuizStatsData:
+    ) -> tuple[int, int, datetime | None]:
 
         result = await db.execute(
             select(
@@ -181,11 +126,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         )
         total_q, total_correct, last_attempt_at = result.one()
 
-        return UserQuizStatsData(
-            total_questions_answered=int(total_q or 0),
-            total_correct_answers=int(total_correct or 0),
-            last_attempt_at=last_attempt_at,
-        )
+        return total_q, total_correct, last_attempt_at
 
     async def get_attempts_for_company_and_user(
         self,
@@ -251,7 +192,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         start: datetime | None = None,
         end: datetime | None = None,
         company_id: UUID | None = None,
-    ) -> list[UserQuizAggregateRow]:
+    ) -> list[tuple[UUID, UUID, int, int, int]]:
 
         conditions = [QuizAttempt.user_id == user_id]
 
@@ -278,17 +219,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
 
         result = await db.execute(stmt)
         rows = result.all()
-
-        return [
-            UserQuizAggregateRow(
-                quiz_id=row[0],
-                company_id=row[1],
-                total_questions=int(row[2] or 0),
-                total_correct_answers=int(row[3] or 0),
-                attempts_count=int(row[4] or 0),
-            )
-            for row in rows
-        ]
+        return rows
 
     async def get_user_quiz_last_attempts(
         self,
@@ -296,7 +227,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         *,
         user_id: int,
         company_id: UUID | None = None,
-    ) -> list[UserQuizLastAttemptRow]:
+    ) -> list[tuple[UUID, UUID, datetime | None]]:
 
         conditions = [QuizAttempt.user_id == user_id]
 
@@ -315,15 +246,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
 
         result = await db.execute(stmt)
         rows = result.all()
-
-        return [
-            UserQuizLastAttemptRow(
-                quiz_id=row[0],
-                company_id=row[1],
-                last_attempt_at=row[2],
-            )
-            for row in rows
-        ]
+        return rows
 
     async def get_company_weekly_aggregates(
         self,
@@ -332,7 +255,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         company_id: UUID,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[CompanyWeeklyStatsRow]:
+    ) -> list[tuple[datetime, int, int, int]]:
 
         week_expr = func.date_trunc("week", QuizAttempt.created_at)
 
@@ -358,16 +281,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
 
         result = await db.execute(stmt)
         rows = result.all()
-
-        return [
-            CompanyWeeklyStatsRow(
-                week_start=row[0],
-                total_questions=int(row[1] or 0),
-                total_correct_answers=int(row[2] or 0),
-                attempts_count=int(row[3] or 0),
-            )
-            for row in rows
-        ]
+        return rows
 
     async def get_company_user_quiz_weekly_aggregates(
         self,
@@ -377,7 +291,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         user_id: int,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> list[CompanyUserQuizWeeklyRow]:
+    ) -> list[tuple[UUID, datetime, int, int, int]]:
 
         week_expr = func.date_trunc("week", QuizAttempt.created_at)
 
@@ -407,24 +321,14 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
 
         result = await db.execute(stmt)
         rows = result.all()
-
-        return [
-            CompanyUserQuizWeeklyRow(
-                quiz_id=row[0],
-                week_start=row[1],
-                total_questions=int(row[2] or 0),
-                total_correct_answers=int(row[3] or 0),
-                attempts_count=int(row[4] or 0),
-            )
-            for row in rows
-        ]
+        return rows
 
     async def get_company_users_last_attempts(
         self,
         db: AsyncSession,
         *,
         company_id: UUID,
-    ) -> list[CompanyUserLastAttemptRow]:
+    ) -> list[tuple[int, datetime | None]]:
 
         stmt = (
             select(
@@ -437,11 +341,4 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
 
         result = await db.execute(stmt)
         rows = result.all()
-
-        return [
-            CompanyUserLastAttemptRow(
-                user_id=int(row[0]),
-                last_attempt_at=row[1],
-            )
-            for row in rows
-        ]
+        return rows

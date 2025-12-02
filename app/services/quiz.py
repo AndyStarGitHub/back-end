@@ -16,7 +16,6 @@ from app.repositories.quiz import QuizRepository
 from app.repositories.quiz_attempt import (
     QuizAttemptRepository,
     QuizAttemptAnswerData,
-    UserQuizStatsData,
 )
 from app.schemas.quiz import (
     QuizCreate,
@@ -464,7 +463,7 @@ class QuizService:
 
         await self._get_company_or_404(db, company_id)
 
-        stats: UserQuizStatsData = (
+        total_q, total_correct, last_attempt_at = (
             await self.quiz_attempt_repo.get_user_stats_for_company(
                 db,
                 user_id=current_user.id,
@@ -472,19 +471,20 @@ class QuizService:
             )
         )
 
-        if stats.total_questions_answered > 0:
-            average = (
-                stats.total_correct_answers / stats.total_questions_answered
-            )
+        total_questions_answered = int(total_q or 0)
+        total_correct_answers = int(total_correct or 0)
+
+        if total_questions_answered > 0:
+            average = total_correct_answers / total_questions_answered
         else:
             average = 0.0
 
         return UserQuizStats(
             user_id=current_user.id,
-            total_questions_answered=stats.total_questions_answered,
-            total_correct_answers=stats.total_correct_answers,
+            total_questions_answered=total_questions_answered,
+            total_correct_answers=total_correct_answers,
             average_score=average,
-            last_attempt_at=stats.last_attempt_at,
+            last_attempt_at=last_attempt_at,
         )
 
     async def get_user_stats_global(
@@ -494,26 +494,27 @@ class QuizService:
         current_user: Any,
     ) -> UserQuizStats:
 
-        stats: UserQuizStatsData = (
+        total_q, total_correct, last_attempt_at = (
             await self.quiz_attempt_repo.get_user_stats_global(
                 db,
                 user_id=current_user.id,
             )
         )
 
-        if stats.total_questions_answered > 0:
-            average = (
-                stats.total_correct_answers / stats.total_questions_answered
-            )
+        total_questions_answered = int(total_q or 0)
+        total_correct_answers = int(total_correct or 0)
+
+        if total_questions_answered > 0:
+            average = total_correct_answers / total_questions_answered
         else:
             average = 0.0
 
         return UserQuizStats(
             user_id=current_user.id,
-            total_questions_answered=stats.total_questions_answered,
-            total_correct_answers=stats.total_correct_answers,
+            total_questions_answered=total_questions_answered,
+            total_correct_answers=total_correct_answers,
             average_score=average,
-            last_attempt_at=stats.last_attempt_at,
+            last_attempt_at=last_attempt_at,
         )
 
     async def get_user_overall_rating(
@@ -655,20 +656,20 @@ class QuizService:
 
         items: list[UserQuizAverageInRange] = []
 
-        for row in rows:
-            if row.total_questions > 0:
-                average = row.total_correct_answers / row.total_questions
+        for quiz_id, company_id_row, total_questions, total_correct, attempts_count in rows:
+            if total_questions > 0:
+                average = total_correct / total_questions
             else:
                 average = 0.0
 
             items.append(
                 UserQuizAverageInRange(
-                    quiz_id=row.quiz_id,
-                    company_id=row.company_id,
+                    quiz_id=quiz_id,
+                    company_id=company_id_row,
                     average_score=average,
-                    total_questions=row.total_questions,
-                    total_correct_answers=row.total_correct_answers,
-                    attempts_count=row.attempts_count,
+                    total_questions=total_questions,
+                    total_correct_answers=total_correct,
+                    attempts_count=attempts_count,
                     period_from=start,
                     period_to=end,
                 )
@@ -697,11 +698,11 @@ class QuizService:
 
         items: list[UserQuizLastAttempt] = [
             UserQuizLastAttempt(
-                quiz_id=row.quiz_id,
-                company_id=row.company_id,
-                last_attempt_at=row.last_attempt_at,
+                quiz_id=quiz_id,
+                company_id=company_id_row,
+                last_attempt_at=last_attempt_at,
             )
-            for row in rows
+            for (quiz_id, company_id_row, last_attempt_at) in rows
         ]
 
         return UserQuizLastAttemptList(
@@ -736,19 +737,19 @@ class QuizService:
 
         items: list[CompanyWeeklyStatsItem] = []
 
-        for row in rows:
-            if row.total_questions > 0:
-                average = row.total_correct_answers / row.total_questions
+        for week_start, total_questions, total_correct, attempts_count in rows:
+            if total_questions > 0:
+                average = total_correct / total_questions
             else:
                 average = 0.0
 
             items.append(
                 CompanyWeeklyStatsItem(
-                    week_start=row.week_start,
+                    week_start=week_start,
                     average_score=average,
-                    total_questions=row.total_questions,
-                    total_correct_answers=row.total_correct_answers,
-                    attempts_count=row.attempts_count,
+                    total_questions=total_questions,
+                    total_correct_answers=total_correct,
+                    attempts_count=attempts_count,
                 )
             )
 
@@ -776,32 +777,30 @@ class QuizService:
             current_user=current_user,
         )
 
-        rows = (
-            await self.quiz_attempt_repo.get_company_user_quiz_weekly_aggregates(
-                db,
-                company_id=company.id,
-                user_id=target_user_id,
-                start=start,
-                end=end,
-            )
+        rows = await self.quiz_attempt_repo.get_company_user_quiz_weekly_aggregates(
+            db,
+            company_id=company.id,
+            user_id=target_user_id,
+            start=start,
+            end=end,
         )
 
         items: list[CompanyUserQuizWeeklyItem] = []
 
-        for row in rows:
-            if row.total_questions > 0:
-                average = row.total_correct_answers / row.total_questions
+        for quiz_id, week_start, total_questions, total_correct, attempts_count in rows:
+            if total_questions > 0:
+                average = total_correct / total_questions
             else:
                 average = 0.0
 
             items.append(
                 CompanyUserQuizWeeklyItem(
-                    quiz_id=row.quiz_id,
-                    week_start=row.week_start,
+                    quiz_id=quiz_id,
+                    week_start=week_start,
                     average_score=average,
-                    total_questions=row.total_questions,
-                    total_correct_answers=row.total_correct_answers,
-                    attempts_count=row.attempts_count,
+                    total_questions=total_questions,
+                    total_correct_answers=total_correct,
+                    attempts_count=attempts_count,
                 )
             )
 
@@ -834,10 +833,10 @@ class QuizService:
 
         items: list[CompanyUserLastAttempt] = [
             CompanyUserLastAttempt(
-                user_id=row.user_id,
-                last_attempt_at=row.last_attempt_at,
+                user_id=user_id,
+                last_attempt_at=last_attempt_at,
             )
-            for row in rows
+            for (user_id, last_attempt_at) in rows
         ]
 
         return CompanyUsersLastAttemptList(

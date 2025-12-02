@@ -6,12 +6,7 @@ import pytest
 from unittest.mock import AsyncMock
 
 from app.services.quiz import QuizService
-from app.repositories.quiz_attempt import (
-    QuizAttemptRepository,
-    UserQuizAggregateRow,
-    UserQuizLastAttemptRow,
-    UserQuizStatsData,
-)
+from app.repositories.quiz_attempt import QuizAttemptRepository
 
 
 @pytest.mark.asyncio
@@ -70,13 +65,7 @@ async def test_get_user_quiz_average_scores_uses_repo_and_computes_average():
 
     quiz_id = uuid4()
     quiz_attempt_repo_mock.get_user_quiz_aggregates_in_range.return_value = [
-        UserQuizAggregateRow(
-            quiz_id=quiz_id,
-            company_id=company_id,
-            total_questions=10,
-            total_correct_answers=7,
-            attempts_count=3,
-        )
+        (quiz_id, company_id, 10, 7, 3),
     ]
 
     result = await service.get_user_quiz_average_scores(
@@ -127,13 +116,7 @@ async def test_get_user_quiz_average_scores_handles_zero_questions():
     quiz_id = uuid4()
     company_id = uuid4()
     quiz_attempt_repo_mock.get_user_quiz_aggregates_in_range.return_value = [
-        UserQuizAggregateRow(
-            quiz_id=quiz_id,
-            company_id=company_id,
-            total_questions=0,
-            total_correct_answers=0,
-            attempts_count=1,
-        )
+        (quiz_id, company_id, 0, 0, 1),
     ]
 
     result = await service.get_user_quiz_average_scores(
@@ -173,16 +156,8 @@ async def test_get_user_quiz_last_attempts_maps_rows_correctly():
     last2 = datetime(2025, 11, 26, 11, 30, 0)
 
     quiz_attempt_repo_mock.get_user_quiz_last_attempts.return_value = [
-        UserQuizLastAttemptRow(
-            quiz_id=quiz_id_1,
-            company_id=company_id,
-            last_attempt_at=last1,
-        ),
-        UserQuizLastAttemptRow(
-            quiz_id=quiz_id_2,
-            company_id=company_id,
-            last_attempt_at=last2,
-        ),
+        (quiz_id_1, company_id, last1),
+        (quiz_id_2, company_id, last2),
     ]
 
     result = await service.get_user_quiz_last_attempts(
