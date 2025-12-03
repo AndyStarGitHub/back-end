@@ -25,13 +25,6 @@ class QuizAttemptAnswerData:
     selected_option_ids: list[UUID]
 
 
-@dataclass
-class UserQuizStatsData:
-    total_questions_answered: int
-    total_correct_answers: int
-    last_attempt_at: datetime | None
-
-
 class QuizAttemptRepository(BaseRepository[QuizAttempt]):
     def __init__(self) -> None:
         super().__init__(QuizAttempt)
@@ -99,7 +92,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         *,
         user_id: int,
         company_id: UUID,
-    ) -> UserQuizStatsData:
+    ) -> tuple[int, int, datetime | None]:
 
         result = await db.execute(
             select(
@@ -113,18 +106,14 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         )
         total_q, total_correct, last_attempt_at = result.one()
 
-        return UserQuizStatsData(
-            total_questions_answered=int(total_q or 0),
-            total_correct_answers=int(total_correct or 0),
-            last_attempt_at=last_attempt_at,
-        )
+        return total_q, total_correct, last_attempt_at
 
     async def get_user_stats_global(
         self,
         db: AsyncSession,
         *,
         user_id: int,
-    ) -> UserQuizStatsData:
+    ) -> tuple[int, int, datetime | None]:
 
         result = await db.execute(
             select(
@@ -137,11 +126,7 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         )
         total_q, total_correct, last_attempt_at = result.one()
 
-        return UserQuizStatsData(
-            total_questions_answered=int(total_q or 0),
-            total_correct_answers=int(total_correct or 0),
-            last_attempt_at=last_attempt_at,
-        )
+        return total_q, total_correct, last_attempt_at
 
     async def get_attempts_for_company_and_user(
         self,
@@ -198,3 +183,162 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
 
         result = await db.execute(stmt)
         return result.scalars().all()
+
+    async def get_user_quiz_aggregates_in_range(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        company_id: UUID | None = None,
+    ) -> list[tuple[UUID, UUID, int, int, int]]:
+
+        conditions = [QuizAttempt.user_id == user_id]
+
+        if company_id is not None:
+            conditions.append(QuizAttempt.company_id == company_id)
+
+        if start is not None:
+            conditions.append(QuizAttempt.created_at >= start)
+
+        if end is not None:
+            conditions.append(QuizAttempt.created_at <= end)
+
+        stmt = (
+            select(
+                QuizAttempt.quiz_id,
+                QuizAttempt.company_id,
+                func.coalesce(func.sum(QuizAttempt.total_questions), 0),
+                func.coalesce(func.sum(QuizAttempt.correct_answers), 0),
+                func.count(QuizAttempt.id),
+            )
+            .where(*conditions)
+            .group_by(QuizAttempt.quiz_id, QuizAttempt.company_id)
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+        return rows
+
+    async def get_user_quiz_last_attempts(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        company_id: UUID | None = None,
+    ) -> list[tuple[UUID, UUID, datetime | None]]:
+
+        conditions = [QuizAttempt.user_id == user_id]
+
+        if company_id is not None:
+            conditions.append(QuizAttempt.company_id == company_id)
+
+        stmt = (
+            select(
+                QuizAttempt.quiz_id,
+                QuizAttempt.company_id,
+                func.max(QuizAttempt.created_at),
+            )
+            .where(*conditions)
+            .group_by(QuizAttempt.quiz_id, QuizAttempt.company_id)
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+        return rows
+
+    async def get_company_weekly_aggregates(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[tuple[datetime, int, int, int]]:
+
+        week_expr = func.date_trunc("week", QuizAttempt.created_at)
+
+        conditions = [QuizAttempt.company_id == company_id]
+
+        if start is not None:
+            conditions.append(QuizAttempt.created_at >= start)
+
+        if end is not None:
+            conditions.append(QuizAttempt.created_at <= end)
+
+        stmt = (
+            select(
+                week_expr.label("week_start"),
+                func.coalesce(func.sum(QuizAttempt.total_questions), 0),
+                func.coalesce(func.sum(QuizAttempt.correct_answers), 0),
+                func.count(QuizAttempt.id),
+            )
+            .where(*conditions)
+            .group_by(week_expr)
+            .order_by(week_expr.asc())
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+        return rows
+
+    async def get_company_user_quiz_weekly_aggregates(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        user_id: int,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[tuple[UUID, datetime, int, int, int]]:
+
+        week_expr = func.date_trunc("week", QuizAttempt.created_at)
+
+        conditions = [
+            QuizAttempt.company_id == company_id,
+            QuizAttempt.user_id == user_id,
+        ]
+
+        if start is not None:
+            conditions.append(QuizAttempt.created_at >= start)
+
+        if end is not None:
+            conditions.append(QuizAttempt.created_at <= end)
+
+        stmt = (
+            select(
+                QuizAttempt.quiz_id,
+                week_expr.label("week_start"),
+                func.coalesce(func.sum(QuizAttempt.total_questions), 0),
+                func.coalesce(func.sum(QuizAttempt.correct_answers), 0),
+                func.count(QuizAttempt.id),
+            )
+            .where(*conditions)
+            .group_by(QuizAttempt.quiz_id, week_expr)
+            .order_by(week_expr.asc())
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+        return rows
+
+    async def get_company_users_last_attempts(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+    ) -> list[tuple[int, datetime | None]]:
+
+        stmt = (
+            select(
+                QuizAttempt.user_id,
+                func.max(QuizAttempt.created_at),
+            )
+            .where(QuizAttempt.company_id == company_id)
+            .group_by(QuizAttempt.user_id)
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+        return rows
