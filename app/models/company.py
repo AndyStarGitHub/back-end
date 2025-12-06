@@ -53,3 +53,9 @@ class Company(UUIDMixin, TimestampedMixin, Base):
         back_populates="company",
         cascade="all, delete-orphan",
     )
+
+    notifications = relationship(
+        "Notification",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )

@@ -10,6 +10,8 @@ from app.core.errors import NotFound, Forbidden
 from app.models.company import Company
 from app.models.company_member import CompanyMemberRoleEnum
 from app.models.quiz import Quiz
+from app.models.notification import NotificationStatusEnum
+from app.repositories.notification import NotificationRepository
 from app.repositories.company import CompanyRepository
 from app.repositories.company_member import CompanyMemberRepository
 from app.repositories.quiz import QuizRepository
@@ -52,6 +54,7 @@ class QuizService:
         company_member_repo: CompanyMemberRepository | None = None,
         quiz_attempt_repo: QuizAttemptRepository | None = None,
         quiz_redis_repo: QuizRedisRepository | None = None,
+        notification_repo: NotificationRepository | None = None,
     ) -> None:
         self.quiz_repo = quiz_repo or QuizRepository()
         self.company_repo = company_repo or CompanyRepository()
@@ -60,6 +63,44 @@ class QuizService:
         )
         self.quiz_attempt_repo = quiz_attempt_repo or QuizAttemptRepository()
         self.quiz_redis_repo = quiz_redis_repo
+        self.notification_repo = notification_repo or NotificationRepository()
+
+    async def _create_notifications_for_new_quiz(
+        self,
+        db: AsyncSession,
+        *,
+        company: Company,
+        quiz: Quiz,
+        created_by_user_id: int,
+    ) -> None:
+
+        members = await self.company_member_repo.get_members_for_company(
+            db,
+            company_id=company.id,
+        )
+        user_ids = {m.user_id for m in members}
+
+        user_ids.add(company.owner_id)
+
+        if created_by_user_id in user_ids:
+            user_ids.remove(created_by_user_id)
+
+        if not user_ids:
+            return
+
+        message = (
+            f'New quiz "{quiz.title}" has been created in your company. '
+            f"You are invited to participate."
+        )
+
+        await self.notification_repo.create_many_for_users(
+            db,
+            user_ids=user_ids,
+            company_id=company.id,
+            quiz_id=quiz.id,
+            message=message,
+            status=NotificationStatusEnum.UNREAD,
+        )
 
     async def _get_company_or_404(
         self,
@@ -303,6 +344,13 @@ class QuizService:
             db,
             company_id=company_id,
             data=data,
+        )
+
+        await self._create_notifications_for_new_quiz(
+            db,
+            company=company,
+            quiz=quiz,
+            created_by_user_id=current_user.id,
         )
 
         return QuizRead.model_validate(quiz)

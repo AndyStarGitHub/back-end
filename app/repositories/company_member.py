@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Sequence, Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,18 @@ from app.repositories.base import BaseRepository
 class CompanyMemberRepository(BaseRepository[CompanyMember]):
     def __init__(self) -> None:
         super().__init__(CompanyMember)
+
+    async def get_members_for_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+    ) -> list[CompanyMember]:
+
+        res = await db.execute(
+            select(CompanyMember).where(CompanyMember.company_id == company_id)
+        )
+        return list(res.scalars().all())
 
     async def get_one_for_company_and_user(
         self,

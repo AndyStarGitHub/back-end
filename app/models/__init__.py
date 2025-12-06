@@ -10,6 +10,7 @@ from .company_join_request import (
     CompanyJoinRequestStatusEnum
 )
 from app.models.quiz import Quiz, QuizQuestion, QuizAnswerOption
+from app.models.notification import Notification
 from app.models.quiz_attempt import (
     QuizAttempt,
     QuizAttemptAnswer,
