@@ -15,6 +15,18 @@ class QuizRepository(BaseRepository[Quiz]):
     def __init__(self) -> None:
         super().__init__(Quiz)
 
+    async def get_all_for_company_simple(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+    ) -> list[Quiz]:
+
+        res = await db.execute(
+            select(Quiz).where(Quiz.company_id == company_id)
+        )
+        return list(res.scalars().all())
+
     async def get_full_by_id(
         self,
         db: AsyncSession,
