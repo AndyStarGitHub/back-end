@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
 from app.core.notification_ws_manager import notifications_ws_manager
-from app.core.deps import get_user_from_token  # ⚠️ адаптуй під свій проект
+from app.core.deps import get_user_from_token
 from app.db.database import get_db
 
 router = APIRouter()
@@ -17,7 +17,7 @@ async def websocket_notifications(websocket: WebSocket):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    async for db in get_db():  # get_db — async generator
+    async for db in get_db():
         try:
             user = await get_user_from_token(db, token)
         except Exception:
