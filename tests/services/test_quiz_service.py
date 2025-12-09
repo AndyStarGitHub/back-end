@@ -11,6 +11,7 @@ from app.schemas.quiz import (
     QuizAnswerOptionCreate,
 )
 from app.services.quiz import QuizService
+from app.repositories.notification import NotificationRepository
 
 
 quiz_service = QuizService()
@@ -421,3 +422,68 @@ async def test_update_quiz_invalid_too_few_questions(
         )
 
     assert "at least two questions" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_create_quiz_creates_notifications_for_company_members(
+    db_session: AsyncSession,
+    user_factory,
+    company_factory,
+    company_member_factory,
+):
+
+    owner = await user_factory(email="owner_notif@example.com")
+    member = await user_factory(email="member_notif@example.com")
+    admin_user = await user_factory(email="admin_notif@example.com")
+
+    company = await company_factory(owner=owner)
+
+    await company_member_factory(
+        company=company,
+        user=member,
+        role=CompanyMemberRoleEnum.MEMBER,
+    )
+
+    await company_member_factory(
+        company=company,
+        user=admin_user,
+        role=CompanyMemberRoleEnum.ADMIN,
+    )
+
+    data = _make_valid_quiz_create()
+
+    await quiz_service.create_quiz(
+        db_session,
+        company_id=company.id,
+        current_user=owner,
+        data=data,
+    )
+
+    notif_repo = NotificationRepository()
+
+    total_owner, owner_notifs = await notif_repo.get_paginated_for_user(
+        db_session,
+        user_id=owner.id,
+        offset=0,
+        limit=10,
+    )
+    assert total_owner == 0
+    assert owner_notifs == []
+
+    total_member, member_notifs = await notif_repo.get_paginated_for_user(
+        db_session,
+        user_id=member.id,
+        offset=0,
+        limit=10,
+    )
+    assert total_member == 1
+    assert data.title in member_notifs[0].message
+
+    total_admin, admin_notifs = await notif_repo.get_paginated_for_user(
+        db_session,
+        user_id=admin_user.id,
+        offset=0,
+        limit=10,
+    )
+    assert total_admin == 1
+    assert data.title in admin_notifs[0].message

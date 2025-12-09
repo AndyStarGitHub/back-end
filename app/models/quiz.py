@@ -55,6 +55,12 @@ class Quiz(UUIDMixin, TimestampedMixin, Base):
         cascade="all, delete-orphan",
     )
 
+    notifications: Mapped[list["Notification"]] = relationship(
+        "Notification",
+        back_populates="quiz",
+        cascade="all, delete-orphan",
+    )
+
 
 class QuizQuestion(UUIDMixin, TimestampedMixin, Base):
     __tablename__ = "quiz_questions"

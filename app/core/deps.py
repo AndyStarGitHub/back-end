@@ -14,12 +14,72 @@ from app.core.errors import TokenDecodeError, InvalidCredentials, Forbidden
 from app.db.database import get_db
 from app.models import User
 from app.repositories.quiz_redis import QuizRedisRepository
-from app.repositories.user_repo import user_repo
+from app.repositories.user_repo import user_repo, UserRepository
 from app.services.auth_service import AuthService, decode_access_token
 from app.services.quiz import QuizService
 from app.services.redis_client import get_redis
 
 bearer = HTTPBearer(auto_error=False)
+
+
+async def get_identity_from_token(token: str) -> dict[str, Any]:
+
+    logger.info("get_identity_from_token: raw token = {}", token)
+
+    try:
+        header = jwt.get_unverified_header(token)
+    except PyJWTError as ex:
+        logger.warning(
+            "get_identity_from_token: failed to parse JWT header: {}",
+            ex
+        )
+        raise TokenDecodeError("Invalid token")
+
+    alg = header.get("alg")
+    kid = header.get("kid")
+    logger.info("get_identity_from_token: header alg={}", alg)
+    logger.info("get_identity_from_token: header kid={}", kid)
+
+    if alg == "RS256" or kid is not None:
+        logger.info("get_identity_from_token: treating token as Auth0")
+        try:
+            claims = verify_auth0_token(token)
+            email = extract_email(claims)
+            logger.info("get_identity_from_token: Auth0 OK, email={}", email)
+            return {
+                "email": email,
+                "source": "auth0",
+                "payload": claims,
+            }
+        except (PyJWKClientError, PyJWTError, HTTPException) as ex:
+            logger.warning(
+                "get_identity_from_token: Auth0 verification failed: {}",
+                ex
+            )
+            raise TokenDecodeError("Invalid Auth0 token")
+
+    logger.info("get_identity_from_token: treating token as local JWT (HS256)")
+    try:
+        logger.info("Token: {}", token)
+        payload = decode_access_token(token)
+        logger.info("Payload: {}", payload)
+    except TokenDecodeError as ex:
+        logger.warning(
+            "get_identity_from_token: local JWT decode failed: {}",
+            ex
+        )
+        raise TokenDecodeError("Invalid token")
+
+    email = payload.get("email")
+    if not email:
+        raise TokenDecodeError("Email not found in token")
+
+    logger.info("get_identity_from_token: local JWT OK, email={}", email)
+    return {
+        "email": email,
+        "source": "local",
+        "payload": payload,
+    }
 
 
 async def get_current_identity(
@@ -117,11 +177,10 @@ def auth_service_dep(db: AsyncSession = Depends(get_db)) -> AuthService:
     return AuthService(db=db)
 
 
-async def get_current_user(
-    identity = Depends(get_current_identity),
-    db: AsyncSession = Depends(get_db),
+async def _resolve_user_from_identity(
+    identity: dict[str, Any],
+    db: AsyncSession,
 ) -> User:
-
     email = identity.get("email")
     source = identity.get("source")
     payload = identity.get("payload") or {}
@@ -157,8 +216,25 @@ async def get_current_user(
     raise InvalidCredentials("Unknown auth source")
 
 
+async def get_current_user(
+    identity = Depends(get_current_identity),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    return await _resolve_user_from_identity(identity, db)
+
+
 async def get_quiz_service(
     redis: Redis = Depends(get_redis),
 ) -> QuizService:
     quiz_redis_repo = QuizRedisRepository(redis)
     return QuizService(quiz_redis_repo=quiz_redis_repo)
+
+
+async def get_user_from_token(
+    db: AsyncSession,
+    token: str,
+) -> User:
+
+    identity = await get_identity_from_token(token)
+    user = await _resolve_user_from_identity(identity, db)
+    return user
