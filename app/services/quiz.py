@@ -44,6 +44,7 @@ from app.schemas.quiz_analytics import (
 )
 
 from app.repositories.quiz_redis import QuizRedisRepository
+from app.core.notification_ws_manager import notifications_ws_manager
 
 
 class QuizService:
@@ -66,41 +67,55 @@ class QuizService:
         self.notification_repo = notification_repo or NotificationRepository()
 
     async def _create_notifications_for_new_quiz(
-        self,
-        db: AsyncSession,
-        *,
-        company: Company,
-        quiz: Quiz,
-        created_by_user_id: int,
+            self,
+            db: AsyncSession,
+            *,
+            company: Company,
+            quiz: Quiz,
+            created_by_user_id: int,
     ) -> None:
 
         members = await self.company_member_repo.get_members_for_company(
             db,
             company_id=company.id,
         )
-        user_ids = {m.user_id for m in members}
 
-        user_ids.add(company.owner_id)
+        user_ids: list[int] = [m.user_id for m in members]
 
-        if created_by_user_id in user_ids:
-            user_ids.remove(created_by_user_id)
+        if company.owner_id not in user_ids:
+            user_ids.append(company.owner_id)
+
+        user_ids = [uid for uid in user_ids if uid != created_by_user_id]
 
         if not user_ids:
             return
 
-        message = (
-            f'New quiz "{quiz.title}" has been created in your company. '
-            f"You are invited to participate."
-        )
+        message_text = f"New quiz in the company {company.name}: {quiz.title}"
 
-        await self.notification_repo.create_many_for_users(
-            db,
-            user_ids=user_ids,
-            company_id=company.id,
-            quiz_id=quiz.id,
-            message=message,
-            status=NotificationStatusEnum.UNREAD,
-        )
+        for uid in user_ids:
+            await self.notification_repo.create_one(
+                db,
+                user_id=uid,
+                message=message_text,
+                company_id=company.id,
+                quiz_id=quiz.id,
+                status=NotificationStatusEnum.UNREAD,
+            )
+
+        for uid in user_ids:
+            try:
+                await notifications_ws_manager.send_to_user(
+                    uid,
+                    {
+                        "type": "quiz_created",
+                        "company_id": str(company.id),
+                        "quiz_id": str(quiz.id),
+                        "title": quiz.title,
+                        "message": message_text,
+                    },
+                )
+            except Exception:
+                pass
 
     async def _get_company_or_404(
         self,

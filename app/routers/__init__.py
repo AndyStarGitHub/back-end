@@ -16,6 +16,7 @@ from app.api.company_quiz_analytics import (
     router as company_quiz_analytics_router,
 )
 from app.api.notifications import router as notifications_router
+from app.api.notifications_ws import router as notifications_ws_router
 
 
 api_router = APIRouter(prefix="/api/v1")
@@ -79,6 +80,10 @@ api_router.include_router(
     notifications_router,
     prefix="/me/notifications",
     tags=["notifications"],
+)
+api_router.include_router(
+    notifications_ws_router,
+    tags=["notifications-ws"],
 )
 
 
