@@ -41,6 +41,13 @@ async def list_users(
         raise HTTPException(status_code=500, detail="Failed to list users")
 
 
+@router.get("/me", response_model=UserDetailResponse)
+async def read_current_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    return current_user
+
+
 @router.get("/{user_id}", response_model=UserDetailResponse)
 async def get_user_by_id(
     user_id: int,
