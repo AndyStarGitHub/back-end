@@ -11,6 +11,14 @@ class CompanyRepository(BaseRepository[Company]):
     def __init__(self) -> None:
         super().__init__(Company)
 
+    async def get_all(
+        self,
+        db: AsyncSession,
+    ) -> list[Company]:
+
+        res = await db.execute(select(Company))
+        return list(res.scalars().all())
+
     async def get_public_paginated(
         self,
         db: AsyncSession,
@@ -37,7 +45,7 @@ class CompanyRepository(BaseRepository[Company]):
     async def get_by_owner_paginated(
         self,
         db: AsyncSession,
-        owner_id: int,   # user.id у вас int
+        owner_id: int,
         *,
         offset: int = 0,
         limit: int = 50,
