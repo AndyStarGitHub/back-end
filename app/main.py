@@ -35,8 +35,7 @@ async def run_reminders_job() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
-    await close_redis()
+
     scheduler.add_job(
         run_reminders_job,
         trigger=CronTrigger(hour=0, minute=0),
@@ -50,6 +49,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         scheduler.shutdown(wait=False)
+        await close_redis()
 
 
 app = FastAPI()
