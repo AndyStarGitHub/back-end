@@ -1,6 +1,11 @@
+from datetime import datetime, timezone
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -8,19 +13,43 @@ from starlette.responses import JSONResponse
 from app.core.config import settings
 from app.core.error_handlers import register_exception_handlers
 from app.core.errors import NotFound, Conflict
+from app.db.database import async_session_maker
 from app.services.redis_client import close_redis
 from app.routers import api_router
+from app.services.quiz_reminder import QuizReminderService
 
 from loguru import logger
 
 logger.add("log/meduzzen.log")
 logger.debug("That's it, beautiful and simple logging!")
 
+scheduler = AsyncIOScheduler(timezone=timezone.utc)
+reminder_service = QuizReminderService()
+
+
+async def run_reminders_job() -> None:
+    async with async_session_maker() as db:
+        now = datetime.now(timezone.utc)
+        await reminder_service.run_daily_reminders(db, now_utc=now)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
     await close_redis()
+    scheduler.add_job(
+        run_reminders_job,
+        trigger=CronTrigger(hour=0, minute=0),
+        id="quiz_daily_reminders",
+        replace_existing=True,
+    )
+
+    scheduler.start()
+
+    try:
+        yield
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI()
