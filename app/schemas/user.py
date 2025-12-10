@@ -19,6 +19,11 @@ class UserOut(BaseModel):
     id: int
     email: str
     full_name: str | None = None
+    is_active: bool
+    about: str | None = None
+    phone: str | None = None
+    position: str | None = None
+    avatar_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -39,6 +44,10 @@ class SignInRequest(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
+    about: Optional[str] = None
+    phone: Optional[str] = None
+    position: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 class UsersListResponse(BaseModel):
@@ -52,6 +61,10 @@ class UserDetailResponse(UserOut):
 
 class UserSelfUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=255)
+    about: Optional[str] = None
+    phone: Optional[str] = Field(None, max_length=32)
+    position: Optional[str] = Field(None, max_length=255)
+    avatar_url: Optional[str] = Field(None, max_length=512)
 
 
 class UserPasswordChange(BaseModel):
