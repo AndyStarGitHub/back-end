@@ -1,6 +1,7 @@
 from sqlalchemy import (
     String,
     Boolean,
+    Text
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +28,11 @@ class User(IdMixin, TimestampedMixin, Base):
         default=True,
         nullable=False
     )
+
+    about: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    position: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     company_memberships: Mapped[list["CompanyMember"]] = relationship(
         "CompanyMember",

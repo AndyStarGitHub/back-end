@@ -57,6 +57,18 @@ class UserService:
         if "full_name" in data:
             updates["full_name"] = data["full_name"]
 
+        if "about" in data:
+            updates["about"] = data["about"]
+
+        if "phone" in data:
+            updates["phone"] = data["phone"]
+
+        if "position" in data:
+            updates["position"] = data["position"]
+
+        if "avatar_url" in data:
+            updates["avatar_url"] = data["avatar_url"]
+
         if not updates:
             user = await user_repo.get_by_id(self.db, user_id)
             if not user:
