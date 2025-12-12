@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession
 )
 from sqlalchemy.pool import NullPool
+from fastapi import HTTPException
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
@@ -19,6 +20,8 @@ from typing import Callable
 from app.models.user import User
 from app.models.company import Company, CompanyVisibilityEnum
 from app.models.company_member import CompanyMember, CompanyMemberRoleEnum
+
+from app.core.deps import get_current_user
 
 
 @pytest.fixture
@@ -183,3 +186,24 @@ async def company_member_factory(
         return member
 
     return _create_company_member
+
+
+@pytest.fixture()
+def override_current_user():
+    def _apply(user: User | None):
+        if user is None:
+            async def _unauthorized():
+                raise HTTPException(
+                    status_code=401,
+                    detail="Not authenticated"
+                )
+            app.dependency_overrides[get_current_user] = _unauthorized
+        else:
+            async def _authorized():
+                return user
+            app.dependency_overrides[get_current_user] = _authorized
+
+    yield _apply
+
+    app.dependency_overrides.pop(get_current_user, None)
+

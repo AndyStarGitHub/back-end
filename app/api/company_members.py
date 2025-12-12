@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, get_current_user
 from app.models.user import User
-from app.schemas.company_members import CompanyMemberUser
+from app.schemas.company_members import (
+    CompanyMemberUser,
+    MyMembershipsResponse
+)
 from app.services.company_members import member_service
 
 
@@ -66,4 +69,22 @@ async def leave_company_endpoint(
         db=db,
         company_id=company_id,
         current_user=current_user,
+    )
+
+
+@router.get(
+    "/me",
+    response_model=MyMembershipsResponse,
+)
+async def get_my_memberships(
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await member_service.list_my_memberships(
+        db=db,
+        current_user=current_user,
+        limit=limit,
+        offset=offset,
     )

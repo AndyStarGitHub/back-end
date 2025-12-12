@@ -10,6 +10,10 @@ from app.models.company import Company
 from app.models.user import User
 from app.repositories.company import CompanyRepository
 from app.repositories.company_member import CompanyMemberRepository
+from app.schemas.company_members import (
+    MyMembershipsResponse,
+    CompanyMembershipOut
+)
 
 
 class CompanyMemberService:
@@ -99,6 +103,28 @@ class CompanyMemberService:
             limit=limit,
         )
         return users
+
+    async def list_my_memberships(
+            self,
+            db: AsyncSession,
+            *,
+            current_user: User,
+            offset: int = 0,
+            limit: int = 50,
+    ) -> MyMembershipsResponse:
+        total, items = await self.member_repo.list_memberships_for_user(
+            db,
+            user_id=current_user.id,
+            offset=offset,
+            limit=limit,
+        )
+
+        return MyMembershipsResponse(
+            total=total,
+            items=[CompanyMembershipOut.model_validate(i) for i in items],
+            offset=offset,
+            limit=limit,
+        )
 
 
 member_service = CompanyMemberService()

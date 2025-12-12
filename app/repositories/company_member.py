@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Sequence, Any
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.models.company_member import CompanyMember, CompanyMemberRoleEnum
 from app.models.user import User
@@ -76,3 +77,28 @@ class CompanyMemberRepository(BaseRepository[CompanyMember]):
         )
         res = await db.execute(stmt)
         return res.scalars().all()
+
+    async def list_memberships_for_user(
+            self,
+            db: AsyncSession,
+            *,
+            user_id: int,
+            offset: int = 0,
+            limit: int = 50,
+    ) -> tuple[int, list[CompanyMember]]:
+        total_result = await db.execute(
+            select(func.count()).select_from(CompanyMember).where(
+                CompanyMember.user_id == user_id
+            )
+        )
+        total = total_result.scalar_one()
+
+        result = await db.execute(
+            select(CompanyMember)
+            .where(CompanyMember.user_id == user_id)
+            .options(selectinload(CompanyMember.company))
+            .offset(offset)
+            .limit(limit)
+        )
+        items = list(result.scalars().all())
+        return total, items
