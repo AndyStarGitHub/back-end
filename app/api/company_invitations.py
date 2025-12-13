@@ -14,10 +14,8 @@ from app.schemas.company_invitations import (
 )
 from app.services.company_invitations import invitation_service
 
-from app.services.company_invitations import CompanyInvitationService
 
 router = APIRouter()
-invitation_service = CompanyInvitationService()
 
 
 @router.post(
