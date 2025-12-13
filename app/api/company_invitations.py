@@ -31,7 +31,7 @@ async def create_company_invitation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    invitation = await invitation_service.invitation_service.invite_user_to_company(
+    invitation = await invitation_service.invite_user_to_company(
         db=db,
         company_id=company_id,
         invited_user_id=data.invited_user_id,
