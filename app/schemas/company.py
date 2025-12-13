@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 from enum import Enum
 from pydantic import BaseModel, ConfigDict
@@ -31,6 +32,8 @@ class CompanyRead(BaseModel):
     name: str
     description: str | None
     visibility: CompanyVisibility
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
