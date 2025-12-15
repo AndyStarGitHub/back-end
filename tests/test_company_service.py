@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from datetime import datetime, timezone
 import uuid
 
 import pytest
@@ -16,29 +16,25 @@ from app.schemas.company import (
 
 
 class DummyUser:
-    """Простий об'єкт користувача з полем id."""
     def __init__(self, id: int) -> None:
         self.id = id
 
 
 class FakeCompany:
-    """In-memory об'єкт Company, схожий на ORM-модель."""
     def __init__(self, **kwargs) -> None:
         for k, v in kwargs.items():
             setattr(self, k, v)
 
 
 class FakeCompanyRepository:
-    """
-    Фейковий репозиторій, який емулює CompanyRepository,
-    але тримає дані в пам'яті, а не в БД.
-    """
     def __init__(self) -> None:
         self._store: dict[uuid.UUID, FakeCompany] = {}
 
     async def create_one(self, db, **values):
         obj_id = uuid.uuid4()
         values.setdefault("id", obj_id)
+        values.setdefault("created_at", datetime.now(timezone.utc))
+        values.setdefault("updated_at", datetime.now(timezone.utc))
         obj = FakeCompany(**values)
         self._store[obj_id] = obj
         return obj
@@ -52,6 +48,7 @@ class FakeCompanyRepository:
             return None
         for ki, valu in values.items():
             setattr(obj, ki, valu)
+        setattr(obj, "updated_at", datetime.now(timezone.utc))
         return obj
 
     async def delete_one(self, db, obj_id):
@@ -85,9 +82,6 @@ class FakeCompanyRepository:
 
 @pytest.fixture
 def service() -> CompanyService:
-    """
-    Фікстура, яка повертає CompanyService з фейковим репозиторієм.
-    """
     repo = FakeCompanyRepository()
     return CompanyService(repo=repo)
 
@@ -120,7 +114,6 @@ async def test_owner_can_see_hidden_company(service: CompanyService):
         data=data,
     )
 
-    # owner повинен бачити свою hidden компанію
     loaded = await service.get_company(
         db=None,
         company_id=created.id,
@@ -142,7 +135,6 @@ async def test_non_owner_cannot_see_hidden_company(service: CompanyService):
         data=CompanyCreate(name="Secret Co", description=None),
     )
 
-    # інший користувач не повинен бачити hidden компанію → 404
     with pytest.raises(HTTPException) as exc_info:
         await service.get_company(
             db=None,
@@ -164,7 +156,6 @@ async def test_list_public_companies_returns_only_public(
         current_user=user,
         data=CompanyCreate(name="Hidden Co", description=None),
     )
-    # Оновлюємо другу в public
     public = await service.create_company(
         db=None,
         current_user=user,
