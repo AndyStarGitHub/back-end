@@ -1,5 +1,5 @@
 from typing import List
-
+from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +22,7 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def create_company_join_request(
-    company_id: str,
+    company_id: UUID,
     _: CompanyJoinRequestCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -112,7 +112,7 @@ async def get_my_join_requests(
     response_model=List[CompanyJoinRequestRead],
 )
 async def get_company_join_requests(
-    company_id: str,
+    company_id: UUID,
     status_filter: str | None = None,
     limit: int = 20,
     offset: int = 0,
