@@ -11,15 +11,15 @@ jobs:
 
     steps:
       - name: Debug secrets
-      - env:
-      - HOST: ${{ secrets.EC2_HOST }}
-      - USERNAME: ${{ secrets.EC2_USER }}
-      - KEY: ${{ secrets.EC2_SSH_KEY }}
-      - run: |
-      - echo "EC2_HOST length: ${#HOST}"
-      - echo "EC2_USER length: ${#USERNAME}"
-      - echo "EC2_SSH_KEY length: ${#KEY}"
-      - test -n "$HOST"
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+          USERNAME: ${{ secrets.EC2_USER }}
+          KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "EC2_HOST length: ${#HOST}"
+          echo "EC2_USER length: ${#USERNAME}"
+          echo "EC2_SSH_KEY length: ${#KEY}"
+          test -n "$HOST"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -29,15 +29,10 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-
             cd ~/projects/back-end
-
             git fetch --all
             git checkout develop
             git pull origin develop
-
             docker compose -f docker-compose.prod.yml up -d --build
-
             docker compose -f docker-compose.prod.yml exec -T api alembic -c /app/alembic.ini upgrade head
-
             docker compose -f docker-compose.prod.yml ps
