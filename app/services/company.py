@@ -34,7 +34,7 @@ class CompanyService:
             visibility=data.visibility,
             owner_id=current_user.id,
         )
-        return CompanyRead.from_orm(obj)
+        return CompanyRead.model_validate(obj)
 
     async def _get_company_or_404(
         self,
