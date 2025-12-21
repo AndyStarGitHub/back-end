@@ -31,7 +31,7 @@ class CompanyService:
             db,
             name=data.name,
             description=data.description,
-            visibility="public",
+            visibility=data.visibility,
             owner_id=current_user.id,
         )
         return CompanyRead.from_orm(obj)

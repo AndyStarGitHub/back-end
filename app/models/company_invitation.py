@@ -1,4 +1,6 @@
 from enum import Enum
+from typing import Optional
+
 from sqlalchemy import ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,3 +56,7 @@ class CompanyInvitation(UUIDMixin, TimestampedMixin, Base):
         foreign_keys=[invited_by_id],
         back_populates="sent_company_invitations",
     )
+
+    @property
+    def company_name(self) -> Optional[str]:
+        return self.company.name if self.company is not None else None

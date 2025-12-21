@@ -4,6 +4,7 @@ from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.company_invitation import (
     CompanyInvitation,
@@ -23,11 +24,13 @@ class CompanyInvitationRepository(BaseRepository[CompanyInvitation]):
         company_id,
         invited_user_id: int,
     ) -> CompanyInvitation | None:
-        stmt = select(self.model).where(
+        stmt = (select(self.model)
+            .options(selectinload(self.model.company))
+            .where(
             self.model.company_id == company_id,
             self.model.invited_user_id == invited_user_id,
             self.model.status == CompanyInvitationStatusEnum.PENDING,
-        )
+        ))
         res = await db.execute(stmt)
         return res.scalars().first()
 
@@ -40,9 +43,11 @@ class CompanyInvitationRepository(BaseRepository[CompanyInvitation]):
         offset: int = 0,
         limit: int = 20,
     ) -> Sequence[CompanyInvitation]:
-        stmt = select(self.model).where(
+        stmt = (select(self.model)
+            .options(selectinload(self.model.company))
+            .where(
             self.model.invited_user_id == user_id,
-        )
+        ))
         if status is not None:
             stmt = stmt.where(self.model.status == status)
 
@@ -64,9 +69,11 @@ class CompanyInvitationRepository(BaseRepository[CompanyInvitation]):
         offset: int = 0,
         limit: int = 20,
     ) -> Sequence[CompanyInvitation]:
-        stmt = select(self.model).where(
+        stmt = (select(self.model)
+            .options(selectinload(self.model.company))
+            .where(
             self.model.company_id == company_id,
-        )
+        ))
         if status is not None:
             stmt = stmt.where(self.model.status == status)
 
