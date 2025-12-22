@@ -17,7 +17,7 @@ class CompanyBase(BaseModel):
 
 
 class CompanyCreate(CompanyBase):
-    pass
+    visibility: CompanyVisibility = CompanyVisibility.public
 
 
 class CompanyUpdate(BaseModel):

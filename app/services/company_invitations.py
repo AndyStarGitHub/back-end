@@ -112,6 +112,8 @@ class CompanyInvitationService:
             status=CompanyInvitationStatusEnum.PENDING,
         )
 
+        invitation.company = company
+
         return invitation
 
     async def _get_user_or_404(

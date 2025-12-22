@@ -22,8 +22,8 @@ class DummyUser:
 
 class FakeCompany:
     def __init__(self, **kwargs) -> None:
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+        for ke, va in kwargs.items():
+            setattr(self, ke, va)
 
 
 class FakeCompanyRepository:
@@ -87,7 +87,7 @@ def service() -> CompanyService:
 
 
 @pytest.mark.anyio
-async def test_create_company_sets_owner_and_hidden(service: CompanyService):
+async def test_create_company_sets_owner_and_publid(service: CompanyService):
     user = DummyUser(id=1)
     data = CompanyCreate(name="My Company", description="Test company")
 
@@ -100,13 +100,17 @@ async def test_create_company_sets_owner_and_hidden(service: CompanyService):
     assert result.name == "My Company"
     assert result.description == "Test company"
     assert result.owner_id == 1
-    assert result.visibility == CompanyVisibility.hidden
+    assert result.visibility == CompanyVisibility.public
 
 
 @pytest.mark.anyio
 async def test_owner_can_see_hidden_company(service: CompanyService):
     owner = DummyUser(id=1)
-    data = CompanyCreate(name="Hidden Co", description=None)
+    data = CompanyCreate(
+        name="Hidden Co",
+        description=None,
+        visibility=CompanyVisibility.hidden
+    )
 
     created = await service.create_company(
         db=None,
@@ -132,7 +136,11 @@ async def test_non_owner_cannot_see_hidden_company(service: CompanyService):
     created = await service.create_company(
         db=None,
         current_user=owner,
-        data=CompanyCreate(name="Secret Co", description=None),
+        data=CompanyCreate(
+            name="Secret Co",
+            description=None,
+            visibility=CompanyVisibility.hidden
+        ),
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -154,12 +162,19 @@ async def test_list_public_companies_returns_only_public(
     hidden = await service.create_company(
         db=None,
         current_user=user,
-        data=CompanyCreate(name="Hidden Co", description=None),
+        data=CompanyCreate(
+            name="Hidden Co",
+            description=None,
+            visibility=CompanyVisibility.hidden
+        ),
     )
     public = await service.create_company(
         db=None,
         current_user=user,
-        data=CompanyCreate(name="Public Co", description=None),
+        data=CompanyCreate(
+            name="Public Co",
+            description=None
+        ),
     )
     await service.update_company(
         db=None,
@@ -220,3 +235,42 @@ async def test_list_my_companies_returns_only_user_companies(
 
     assert names1 == ["User1 Co1", "User1 Co2"]
     assert names2 == ["User2 Co1"]
+
+
+@pytest.mark.anyio
+async def test_create_company_can_set_public_visibility(
+        service: CompanyService
+):
+    user = DummyUser(id=1)
+    data = CompanyCreate(
+        name="My Public Company",
+        description=None,
+        visibility=CompanyVisibility.public,
+    )
+
+    result: CompanyRead = await service.create_company(
+        db=None,
+        current_user=user,
+        data=data,
+    )
+
+    assert result.visibility == CompanyVisibility.public
+
+    @pytest.mark.anyio
+    async def test_create_company_can_set_hidden_visibility(
+            service: CompanyService
+    ):
+        user = DummyUser(id=1)
+        data = CompanyCreate(
+            name="Hidden Co",
+            description=None,
+            visibility=CompanyVisibility.hidden
+        )
+
+        result = await service.create_company(
+            db=None,
+            current_user=user,
+            data=data
+        )
+
+        assert result.visibility == CompanyVisibility.hidden

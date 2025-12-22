@@ -36,9 +36,31 @@ async def test_create_company_ok(client: AsyncClient):
 
     assert data["name"] == payload["name"]
     assert data["description"] == payload["description"]
-    assert data["visibility"] == CompanyVisibility.hidden.value
+    assert data["visibility"] == CompanyVisibility.public
     assert data["owner_id"] == 1
     UUID(data["id"])
+
+
+@pytest.mark.anyio
+async def test_create_company_can_set_public_visibility(client: AsyncClient):
+
+    def override_current_user():
+        return DummyUser(id=1)
+
+    app.dependency_overrides[get_current_user] = override_current_user
+
+    payload = {
+        "name": "Public Company",
+        "description": None,
+        "visibility": CompanyVisibility.public.value,
+    }
+
+    resp = await client.post("/api/v1/companies", json=payload)
+    app.dependency_overrides.pop(get_current_user, None)
+
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["visibility"] == CompanyVisibility.public.value
 
 
 @pytest.mark.anyio
@@ -50,7 +72,11 @@ async def test_owner_can_see_hidden_company(client: AsyncClient):
     app.dependency_overrides[get_current_user] = owner_dep
     create_resp = await client.post(
         "/api/v1/companies",
-        json={"name": "Hidden Co", "description": None},
+        json={
+            "name": "Hidden Co",
+            "description": None,
+            "visibility": CompanyVisibility.hidden
+        },
     )
     assert create_resp.status_code == 201, create_resp.text
     created = create_resp.json()
@@ -77,7 +103,11 @@ async def test_non_owner_cannot_see_hidden_company(client: AsyncClient):
     app.dependency_overrides[get_current_user] = owner_dep
     create_resp = await client.post(
         "/api/v1/companies",
-        json={"name": "Secret Co", "description": None},
+        json={
+            "name": "Secret Co",
+            "description": None,
+            "visibility": CompanyVisibility.hidden
+        },
     )
     assert create_resp.status_code == 201, create_resp.text
     created = create_resp.json()
@@ -186,13 +216,21 @@ async def test_list_public_and_my_companies(client: AsyncClient):
     app.dependency_overrides[get_current_user] = user1_dep
     resp1 = await client.post(
         "/api/v1/companies",
-        json={"name": "User1 Hidden", "description": None},
+        json={
+            "name": "User1 Hidden",
+            "description": None,
+            "visibility": CompanyVisibility.hidden.value,
+        },
     )
     assert resp1.status_code == 201, resp1.text
 
     resp2 = await client.post(
         "/api/v1/companies",
-        json={"name": "User1 Public", "description": None},
+        json={
+            "name": "User1 Public",
+            "description": None,
+            "visibility": CompanyVisibility.public.value,
+        },
     )
     assert resp2.status_code == 201, resp2.text
     created_public = resp2.json()
@@ -207,7 +245,11 @@ async def test_list_public_and_my_companies(client: AsyncClient):
     app.dependency_overrides[get_current_user] = user2_dep
     resp3 = await client.post(
         "/api/v1/companies",
-        json={"name": "User2 Hidden", "description": None},
+        json={
+            "name": "User2 Hidden",
+            "description": None,
+            "visibility": CompanyVisibility.hidden.value,
+        },
     )
     assert resp3.status_code == 201, resp3.text
 
@@ -242,3 +284,42 @@ async def test_list_public_and_my_companies(client: AsyncClient):
     assert "User2 Hidden" in names_me_2
     assert "User1 Public" not in names_me_2
     assert "User1 Hidden" not in names_me_2
+
+
+@pytest.mark.anyio
+async def test_create_company_invalid_visibility_422(client: AsyncClient):
+
+    def override_current_user():
+        return DummyUser(id=1)
+
+    app.dependency_overrides[get_current_user] = override_current_user
+
+    resp = await client.post(
+        "/api/v1/companies",
+        json={
+            "name": "Bad Co",
+            "description": None,
+            "visibility": "wrong"
+        },
+    )
+    app.dependency_overrides.pop(get_current_user, None)
+
+    assert resp.status_code == 422, resp.text
+
+    @pytest.mark.anyio
+    async def test_create_company_default_visibility_is_public(
+            client: AsyncClient
+    ):
+        def override_current_user():
+            return DummyUser(id=1)
+
+        app.dependency_overrides[get_current_user] = override_current_user
+
+        resp = await client.post(
+            "/api/v1/companies",
+            json={"name": "Default Public Co", "description": None},
+        )
+        app.dependency_overrides.pop(get_current_user, None)
+
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["visibility"] == CompanyVisibility.public.value

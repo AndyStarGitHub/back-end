@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 class CompanyInvitationBase(BaseModel):
     status: str
-    company_id: UUID          # замість str
+    company_id: UUID
     invited_user_id: int
     invited_by_id: int
 
@@ -16,9 +16,10 @@ class CompanyInvitationCreate(BaseModel):
 
 
 class CompanyInvitationRead(CompanyInvitationBase):
-    id: UUID                  # замість str
+    id: UUID
     created_at: datetime
     updated_at: datetime
+    company_name: str
 
     class Config:
         from_attributes = True
