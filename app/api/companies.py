@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_db, get_current_user
 
 from app.models import User
+from app.schemas.company_members import CompanyMemberRead
 from app.services import company_admin_service
 from app.services.company import CompanyService
 from app.services.quiz import QuizService
@@ -158,7 +159,7 @@ async def get_company_admins(
 
 @router.post(
     "/{company_id}/admins/{user_id}",
-    response_model=CompanyAdminOut,
+    response_model=CompanyMemberRead,
     status_code=status.HTTP_200_OK,
 )
 async def make_user_admin(
@@ -167,18 +168,18 @@ async def make_user_admin(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> CompanyAdminOut:
-    user = await company_admin_service.assign_admin(
+    member = await company_admin_service.assign_admin(
         db,
         company_id=company_id,
         member_user_id=user_id,
         current_user=current_user,
     )
-    return user
+    return member
 
 
 @router.delete(
     "/{company_id}/admins/{user_id}",
-    response_model=CompanyAdminOut,
+    response_model=CompanyMemberRead,
     status_code=status.HTTP_200_OK,
 )
 async def remove_user_admin(
@@ -186,14 +187,14 @@ async def remove_user_admin(
     user_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> CompanyAdminOut:
-    user = await company_admin_service.remove_admin(
+) -> CompanyMemberRead:
+    member = await company_admin_service.remove_admin(
         db,
         company_id=company_id,
         member_user_id=user_id,
         current_user=current_user,
     )
-    return user
+    return member
 
 
 @router.post(
