@@ -192,64 +192,69 @@ async def test_update_quiz_replaces_questions(
 
 
 @pytest.mark.asyncio
-async def test_list_quizzes_for_company_only_admin_can_see(
+async def test_list_quizzes_for_company_owner_admin_member_can_see(
     db_session: AsyncSession,
     user_factory,
     company_factory,
     company_member_factory,
 ):
-
     owner = await user_factory(email="owner@example.com")
     member = await user_factory(email="member@example.com")
     admin_user = await user_factory(email="admin@example.com")
 
     company = await company_factory(owner=owner)
 
-    await company_member_factory(
-        company=company,
-        user=member,
-        role=CompanyMemberRoleEnum.MEMBER,
-    )
+    await company_member_factory(company=company, user=member, role=CompanyMemberRoleEnum.MEMBER)
+    await company_member_factory(company=company, user=admin_user, role=CompanyMemberRoleEnum.ADMIN)
 
-    await company_member_factory(
-        company=company,
-        user=admin_user,
-        role=CompanyMemberRoleEnum.ADMIN,
-    )
-
-    data = _make_valid_quiz_create()
     await quiz_service.create_quiz(
         db_session,
         company_id=company.id,
         current_user=owner,
-        data=data,
+        data=_make_valid_quiz_create(),
     )
 
     resp_owner = await quiz_service.list_quizzes_for_company(
-        db_session,
-        company_id=company.id,
-        current_user=owner,
-        offset=0,
-        limit=50,
+        db_session, company_id=company.id, current_user=owner, offset=0, limit=50
     )
     assert resp_owner.total == 1
     assert len(resp_owner.items) == 1
 
     resp_admin = await quiz_service.list_quizzes_for_company(
-        db_session,
-        company_id=company.id,
-        current_user=admin_user,
-        offset=0,
-        limit=50,
+        db_session, company_id=company.id, current_user=admin_user, offset=0, limit=50
     )
     assert resp_admin.total == 1
     assert len(resp_admin.items) == 1
+
+    resp_member = await quiz_service.list_quizzes_for_company(
+        db_session, company_id=company.id, current_user=member, offset=0, limit=50
+    )
+    assert resp_member.total == 1
+    assert len(resp_member.items) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_quizzes_for_company_forbidden_for_non_member(
+    db_session: AsyncSession,
+    user_factory,
+    company_factory,
+):
+    owner = await user_factory(email="owner@example.com")
+    outsider = await user_factory(email="outsider@example.com")
+    company = await company_factory(owner=owner)
+
+    await quiz_service.create_quiz(
+        db_session,
+        company_id=company.id,
+        current_user=owner,
+        data=_make_valid_quiz_create(),
+    )
 
     with pytest.raises(Forbidden):
         await quiz_service.list_quizzes_for_company(
             db_session,
             company_id=company.id,
-            current_user=member,
+            current_user=outsider,
             offset=0,
             limit=50,
         )

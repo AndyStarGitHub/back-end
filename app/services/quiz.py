@@ -146,6 +146,24 @@ class QuizService:
         if not member or member.role != CompanyMemberRoleEnum.ADMIN:
             raise Forbidden("Only company owner or admin can manage quizzes")
 
+    async def _ensure_is_company_member(
+            self,
+            db: AsyncSession,
+            *,
+            company: Company,
+            current_user: Any,
+    ) -> None:
+        if company.owner_id == current_user.id:
+            return
+
+        member = await self.company_member_repo.get_one_for_company_and_user(
+            db,
+            company_id=company.id,
+            user_id=current_user.id,
+        )
+        if not member:
+            raise Forbidden("Only company members can view quizzes")
+
     def _validate_questions(self, questions: list[QuizQuestionCreate]) -> None:
 
         if len(questions) < 2:
@@ -458,7 +476,7 @@ class QuizService:
     ) -> QuizListResponse:
 
         company = await self._get_company_or_404(db, company_id)
-        await self._ensure_is_company_admin(
+        await self._ensure_is_company_member(
             db,
             company=company,
             current_user=current_user,
