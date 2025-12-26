@@ -2,7 +2,6 @@ import pytest
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import Forbidden, NotFound
 from app.models.company_member import CompanyMemberRoleEnum
 from app.schemas.quiz import (
     QuizCreate,
@@ -12,6 +11,7 @@ from app.schemas.quiz import (
 )
 from app.services.quiz import QuizService
 from app.repositories.notification import NotificationRepository
+from app.core.errors import Forbidden, NotFound, Conflict
 
 
 quiz_service = QuizService()
@@ -204,8 +204,16 @@ async def test_list_quizzes_for_company_owner_admin_member_can_see(
 
     company = await company_factory(owner=owner)
 
-    await company_member_factory(company=company, user=member, role=CompanyMemberRoleEnum.MEMBER)
-    await company_member_factory(company=company, user=admin_user, role=CompanyMemberRoleEnum.ADMIN)
+    await company_member_factory(
+        company=company,
+        user=member,
+        role=CompanyMemberRoleEnum.MEMBER
+    )
+    await company_member_factory(
+        company=company,
+        user=admin_user,
+        role=CompanyMemberRoleEnum.ADMIN
+    )
 
     await quiz_service.create_quiz(
         db_session,
@@ -215,19 +223,31 @@ async def test_list_quizzes_for_company_owner_admin_member_can_see(
     )
 
     resp_owner = await quiz_service.list_quizzes_for_company(
-        db_session, company_id=company.id, current_user=owner, offset=0, limit=50
+        db_session,
+        company_id=company.id,
+        current_user=owner,
+        offset=0,
+        limit=50
     )
     assert resp_owner.total == 1
     assert len(resp_owner.items) == 1
 
     resp_admin = await quiz_service.list_quizzes_for_company(
-        db_session, company_id=company.id, current_user=admin_user, offset=0, limit=50
+        db_session,
+        company_id=company.id,
+        current_user=admin_user,
+        offset=0,
+        limit=50
     )
     assert resp_admin.total == 1
     assert len(resp_admin.items) == 1
 
     resp_member = await quiz_service.list_quizzes_for_company(
-        db_session, company_id=company.id, current_user=member, offset=0, limit=50
+        db_session,
+        company_id=company.id,
+        current_user=member,
+        offset=0,
+        limit=50
     )
     assert resp_member.total == 1
     assert len(resp_member.items) == 1
@@ -492,3 +512,88 @@ async def test_create_quiz_creates_notifications_for_company_members(
     )
     assert total_admin == 1
     assert data.title in admin_notifs[0].message
+
+
+@pytest.mark.asyncio
+async def test_create_quiz_conflict_on_duplicate_question_titles_case_insensitive_trimmed(
+    db_session: AsyncSession,
+    user_factory,
+    company_factory,
+):
+    owner = await user_factory(email="owner@example.com")
+    company = await company_factory(owner=owner)
+
+    data = QuizCreate(
+        title="Quiz with duplicate questions",
+        description=None,
+        questions=[
+            QuizQuestionCreate(
+                title="Hello",
+                options=[
+                    QuizAnswerOptionCreate(text="A1", is_correct=True),
+                    QuizAnswerOptionCreate(text="A2", is_correct=False),
+                ],
+            ),
+            QuizQuestionCreate(
+                title=" hello   ",
+                options=[
+                    QuizAnswerOptionCreate(text="B1", is_correct=False),
+                    QuizAnswerOptionCreate(text="B2", is_correct=True),
+                ],
+            ),
+        ],
+    )
+
+    with pytest.raises(Conflict) as exc_info:
+        await quiz_service.create_quiz(
+            db_session,
+            company_id=company.id,
+            current_user=owner,
+            data=data,
+        )
+
+    assert "question titles" in str(exc_info.value).lower() or "duplicate" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_create_quiz_conflict_on_duplicate_answer_options_case_insensitive_trimmed(
+    db_session: AsyncSession,
+    user_factory,
+    company_factory,
+):
+    owner = await user_factory(email="owner@example.com")
+    company = await company_factory(owner=owner)
+
+    data = QuizCreate(
+        title="Quiz with duplicate answer options",
+        description=None,
+        questions=[
+            QuizQuestionCreate(
+                title="Question 1",
+                options=[
+                    QuizAnswerOptionCreate(text="Yes", is_correct=True),
+                    QuizAnswerOptionCreate(
+                        text=" yes  ",
+                        is_correct=False
+                    ),
+                ],
+            ),
+            QuizQuestionCreate(
+                title="Question 2",
+                options=[
+                    QuizAnswerOptionCreate(text="B1", is_correct=False),
+                    QuizAnswerOptionCreate(text="B2", is_correct=True),
+                ],
+            ),
+        ],
+    )
+
+    with pytest.raises(Conflict) as exc_info:
+        await quiz_service.create_quiz(
+            db_session,
+            company_id=company.id,
+            current_user=owner,
+            data=data,
+        )
+
+    assert "answer options" in str(exc_info.value).lower() or "duplicate" in str(exc_info.value).lower()
