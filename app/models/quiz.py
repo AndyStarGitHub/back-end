@@ -90,15 +90,6 @@ class QuizQuestion(UUIDMixin, TimestampedMixin, Base):
         cascade="all, delete-orphan",
     )
 
-    __table_args__ = (
-        Index(
-            "uq_quiz_questions_quiz_id_title_norm",
-            "quiz_id",
-            func.lower(func.trim(title)),
-            unique=True,
-        ),
-    )
-
 
 class QuizAnswerOption(UUIDMixin, TimestampedMixin, Base):
     __tablename__ = "quiz_answer_options"
@@ -119,13 +110,4 @@ class QuizAnswerOption(UUIDMixin, TimestampedMixin, Base):
     question: Mapped["QuizQuestion"] = relationship(
         "QuizQuestion",
         back_populates="options",
-    )
-
-    __table_args__ = (
-        Index(
-            "uq_quiz_answer_options_question_id_text_norm",
-            "question_id",
-            func.lower(func.trim(text)),
-            unique=True,
-        ),
     )
