@@ -387,11 +387,17 @@ class QuizService:
             msg = str(getattr(e, "orig", e))
 
             if "uq_quiz_questions_quiz_id_title_norm" in msg:
-                raise Conflict("Question titles in a quiz must be unique (case-insensitive, trimmed).")
+                raise Conflict(
+                    "Question titles in a quiz must be unique (case-insensitive, trimmed)."
+                )
             if "uq_quiz_answer_options_question_id_text_norm" in msg:
-                raise Conflict("Answer options in a question must be unique (case-insensitive, trimmed).")
+                raise Conflict(
+                    "Answer options in a question must be unique (case-insensitive, trimmed)."
+                )
 
-            raise Conflict("Duplicate question title or duplicate answer option.")
+            raise Conflict(
+                "Duplicate question title or duplicate answer option."
+            )
 
         await self._create_notifications_for_new_quiz(
             db,
@@ -412,7 +418,8 @@ class QuizService:
     ) -> QuizRead:
 
         company = await self._get_company_or_404(db, company_id)
-        await self._ensure_is_company_admin(
+
+        await self._ensure_is_company_member(
             db,
             company=company,
             current_user=current_user,
@@ -460,11 +467,17 @@ class QuizService:
             msg = str(getattr(e, "orig", e))
 
             if "uq_quiz_questions_quiz_id_title_norm" in msg:
-                raise Conflict("Question titles in a quiz must be unique (case-insensitive, trimmed).")
+                raise Conflict(
+                    "Question titles in a quiz must be unique (case-insensitive, trimmed)."
+                )
             if "uq_quiz_answer_options_question_id_text_norm" in msg:
-                raise Conflict("Answer options in a question must be unique (case-insensitive, trimmed).")
+                raise Conflict(
+                    "Answer options in a question must be unique (case-insensitive, trimmed)."
+                )
 
-            raise Conflict("Duplicate question title or duplicate answer option.")
+            raise Conflict(
+                "Duplicate question title or duplicate answer option."
+            )
 
         return QuizRead.model_validate(quiz)
 
