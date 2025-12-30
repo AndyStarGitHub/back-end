@@ -206,4 +206,3 @@ def override_current_user():
     yield _apply
 
     app.dependency_overrides.pop(get_current_user, None)
-

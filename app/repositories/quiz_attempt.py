@@ -10,6 +10,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models import Quiz
 from app.models.quiz_attempt import (
     QuizAttempt,
     QuizAttemptAnswer,
@@ -342,3 +343,98 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
         result = await db.execute(stmt)
         rows = result.all()
         return rows
+
+    async def get_global_aggregates(
+        self,
+        db: AsyncSession,
+    ) -> tuple[int, int, int]:
+
+        result = await db.execute(
+            select(
+                func.coalesce(func.sum(QuizAttempt.total_questions), 0),
+                func.coalesce(func.sum(QuizAttempt.correct_answers), 0),
+                func.count(QuizAttempt.id),
+            )
+        )
+
+        total_q, total_correct, attempts_count = result.one()
+        return (int(total_q or 0),
+                int(total_correct or 0),
+                int(attempts_count or 0))
+
+    async def get_user_quiz_weekly_aggregates(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[tuple[UUID, datetime, int, int, int]]:
+
+        week_expr = func.date_trunc("week", QuizAttempt.created_at)
+
+        conditions = [QuizAttempt.user_id == user_id]
+
+        if start is not None:
+            conditions.append(QuizAttempt.created_at >= start)
+
+        if end is not None:
+            conditions.append(QuizAttempt.created_at <= end)
+
+        stmt = (
+            select(
+                QuizAttempt.quiz_id,
+                week_expr.label("week_start"),
+                func.coalesce(func.sum(QuizAttempt.total_questions), 0),
+                func.coalesce(func.sum(QuizAttempt.correct_answers), 0),
+                func.count(QuizAttempt.id),
+            )
+            .where(*conditions)
+            .group_by(QuizAttempt.quiz_id, week_expr)
+            .order_by(week_expr.asc())
+        )
+
+        result = await db.execute(stmt)
+        return result.all()
+
+    async def get_company_quizzes_last_attempts(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        include_empty_quizzes: bool = True,
+    ) -> list[tuple[UUID, datetime | None]]:
+
+        if not include_empty_quizzes:
+            stmt = (
+                select(
+                    QuizAttempt.quiz_id,
+                    func.max(QuizAttempt.created_at),
+                )
+                .where(QuizAttempt.company_id == company_id)
+                .group_by(QuizAttempt.quiz_id)
+            )
+
+            result = await db.execute(stmt)
+            return result.all()
+
+        stmt = (
+            select(
+                Quiz.id.label("quiz_id"),
+                func.max(QuizAttempt.created_at),
+            )
+            .select_from(Quiz)
+            .outerjoin(
+                QuizAttempt,
+                and_(
+                    QuizAttempt.quiz_id == Quiz.id,
+                    QuizAttempt.company_id == company_id,
+                ),
+            )
+            .where(Quiz.company_id == company_id)
+            .group_by(Quiz.id)
+            .order_by(Quiz.id.asc())
+        )
+
+        result = await db.execute(stmt)
+        return result.all()

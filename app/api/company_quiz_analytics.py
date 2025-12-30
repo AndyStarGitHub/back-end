@@ -13,6 +13,7 @@ from app.schemas.quiz_analytics import (
     CompanyWeeklyStats,
     CompanyUserQuizWeeklyStats,
     CompanyUsersLastAttemptList,
+    CompanyQuizLastAttemptList,
 )
 
 router = APIRouter()
@@ -73,6 +74,23 @@ async def get_company_users_last_attempts(
 ):
 
     return await quiz_service.get_company_users_last_attempts(
+        db,
+        company_id=company_id,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/quizzes/last-attempts",
+    response_model=CompanyQuizLastAttemptList,
+)
+async def get_company_quizzes_last_attempts(
+    company_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    quiz_service: QuizService = Depends(get_quiz_service),
+):
+    return await quiz_service.get_company_quizzes_last_attempts(
         db,
         company_id=company_id,
         current_user=current_user,
