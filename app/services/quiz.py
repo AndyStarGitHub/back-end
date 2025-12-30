@@ -4,12 +4,14 @@ from typing import Any, Literal
 from uuid import UUID
 from datetime import datetime, timedelta
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import NotFound, Forbidden
+from app.core.config import settings
+from app.core.errors import NotFound, Forbidden, UnprocessableEntity
 from app.models.company import Company
 from app.models.company_member import CompanyMemberRoleEnum
-from app.models.quiz import Quiz
+from app.models.quiz import Quiz, QuizQuestion, QuizAnswerOption
 from app.models.notification import NotificationStatusEnum
 from app.repositories.notification import NotificationRepository
 from app.repositories.company import CompanyRepository
@@ -48,6 +50,16 @@ from app.core.notification_ws_manager import notifications_ws_manager
 
 from sqlalchemy.exc import IntegrityError
 from app.core.errors import Conflict
+from app.services.quiz_import import (
+    parse_quizzes_from_excel,
+    ImportErrorItem,
+)
+
+from app.core.config.app import AppSettings
+
+
+def _norm_title(s: str) -> str:
+    return " ".join((s or "").strip().lower().split())
 
 
 class QuizService:
@@ -480,6 +492,141 @@ class QuizService:
             )
 
         return QuizRead.model_validate(quiz)
+
+    async def import_quizzes_from_excel(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        file_bytes: bytes,
+    ) -> dict:
+        company = await self._get_company_or_404(db, company_id)
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        parsed = parse_quizzes_from_excel(
+            file_bytes,
+            max_rows=settings.app.QUIZ_IMPORT_MAX_ROWS,
+        )
+
+        if parsed.errors:
+            raise UnprocessableEntity(
+                [
+                    {"row": e.row, "field": e.field, "message": e.message}
+                    for e in parsed.errors
+                ]
+            )
+
+        existing_quizzes = await self.quiz_repo.get_all_for_company_simple(
+            db,
+            company_id=company_id,
+        )
+
+        quizzes_by_id = {q.id: q for q in existing_quizzes}
+        quizzes_by_title = {
+            _norm_title(q.title): q
+            for q in existing_quizzes
+        }
+
+        created = 0
+        updated = 0
+
+        try:
+            for item in parsed.items:
+                try:
+                    self._validate_questions(item.quiz_create.questions)
+                except Exception as e:
+                    raise UnprocessableEntity([
+                        {
+                            "row": item.first_row,
+                            "field": "questions",
+                            "message": str(e),
+                        }
+                    ])
+
+                quiz = None
+
+                if item.quiz_id:
+                    quiz = quizzes_by_id.get(item.quiz_id)
+                    if not quiz:
+                        raise Conflict(
+                            f"Quiz with id {item.quiz_id} not found in this company"
+                        )
+
+                else:
+                    quiz = quizzes_by_title.get(item.quiz_title_norm)
+
+                if quiz:
+                    full_quiz = await self.quiz_repo.get_full_by_id(
+                        db,
+                        quiz.id
+                    )
+                    if full_quiz is None:
+                        raise Conflict(f"Quiz not found: {quiz.id}")
+
+                    full_quiz.title = item.quiz_create.title
+                    full_quiz.description = item.quiz_create.description
+                    full_quiz.frequency = item.quiz_create.frequency.value
+
+                    full_quiz.questions.clear()
+
+                    for q_data in item.quiz_create.questions:
+                        question = QuizQuestion(title=q_data.title)
+                        for opt_data in q_data.options:
+                            option = QuizAnswerOption(
+                                text=opt_data.text,
+                                is_correct=opt_data.is_correct,
+                            )
+                            question.options.append(option)
+                        full_quiz.questions.append(question)
+
+                    updated += 1
+
+                else:
+                    quiz = Quiz(
+                        title=item.quiz_create.title,
+                        description=item.quiz_create.description,
+                        frequency=item.quiz_create.frequency.value,
+                        company_id=company_id,
+                    )
+
+                    for q_data in item.quiz_create.questions:
+                        question = QuizQuestion(title=q_data.title)
+                        for opt_data in q_data.options:
+                            option = QuizAnswerOption(
+                                text=opt_data.text,
+                                is_correct=opt_data.is_correct,
+                            )
+                            question.options.append(option)
+                        quiz.questions.append(question)
+
+                    db.add(quiz)
+                    await db.flush()
+
+                    await self._create_notifications_for_new_quiz(
+                        db,
+                        company=company,
+                        quiz=quiz,
+                        created_by_user_id=current_user.id,
+                    )
+
+                    created += 1
+
+            await db.commit()
+
+        except Exception:
+            await db.rollback()
+            raise
+
+        return {
+            "created": created,
+            "updated": updated,
+            "total_in_file": parsed.total_quizzes_in_file,
+        }
 
     async def delete_quiz(
         self,

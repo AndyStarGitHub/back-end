@@ -60,3 +60,9 @@ class Conflict(AppError):
 
 class TokenDecodeError(Exception):
     ...
+
+
+class UnprocessableEntity(AppError):
+    def __init__(self, detail):
+        self.detail = detail
+        super().__init__("Unprocessable Entity")
