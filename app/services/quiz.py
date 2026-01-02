@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -42,7 +41,11 @@ from app.schemas.quiz_analytics import (
     CompanyUserQuizWeeklyStats,
     CompanyUserQuizWeeklyItem,
     CompanyUsersLastAttemptList,
-    CompanyUserLastAttempt, CompanyQuizLastAttemptList, CompanyQuizLastAttemptItem, MyQuizWeeklyStats, MyQuizWeeklyItem,
+    CompanyUserLastAttempt,
+    CompanyQuizLastAttemptList,
+    CompanyQuizLastAttemptItem,
+    MyQuizWeeklyStats,
+    MyQuizWeeklyItem,
     GlobalRatingStats,
 )
 
@@ -807,13 +810,14 @@ class QuizService:
 
         since = datetime.utcnow() - timedelta(hours=48)
 
-        attempts_seq = await self.quiz_attempt_repo.get_attempts_for_company_and_user(
-            db,
-            company_id=company.id,
-            user_id=current_user.id,
-            since=since,
-            quiz_id=quiz_id,
-        )
+        attempts_seq = await (
+            self.quiz_attempt_repo.get_attempts_for_company_and_user(
+                db,
+                company_id=company.id,
+                user_id=current_user.id,
+                since=since,
+                quiz_id=quiz_id,
+            ))
 
         attempts = list(attempts_seq)
 
@@ -846,13 +850,14 @@ class QuizService:
 
         since = datetime.utcnow() - timedelta(hours=48)
 
-        attempts_seq = await self.quiz_attempt_repo.get_attempts_for_company_and_user(
-            db,
-            company_id=company.id,
-            user_id=target_user_id,
-            since=since,
-            quiz_id=quiz_id,
-        )
+        attempts_seq = await (
+            self.quiz_attempt_repo.get_attempts_for_company_and_user(
+                db,
+                company_id=company.id,
+                user_id=target_user_id,
+                since=since,
+                quiz_id=quiz_id,
+            ))
 
         attempts = list(attempts_seq)
 
@@ -901,6 +906,286 @@ class QuizService:
             quiz_id=quiz_id,
         )
 
+    def _dt_to_iso_z(self, dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+
+        if dt.tzinfo is None:
+            return (dt.
+                    replace(tzinfo=timezone.utc).isoformat().
+                    replace("+00:00", "Z")
+                    )
+        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    def _build_db_export_json(
+        self,
+        *,
+        company_id: UUID,
+        attempts: list["QuizAttempt"],
+        user_id: int | None = None,
+        quiz_id: UUID | None = None,
+    ) -> dict:
+        out_attempts: list[dict] = []
+
+        for att in attempts:
+            answers_payload: list[dict] = []
+
+            for ans in getattr(att, "answers", []) or []:
+                question = getattr(ans, "question", None)
+                question_title = getattr(question, "title", None)
+
+                selected = []
+                selected_ids = []
+                for sel in getattr(ans, "selected_options", []) or []:
+                    opt = getattr(sel, "option", None)
+                    opt_id = (getattr(sel, "option_id", None)
+                              or getattr(opt, "id", None))
+                    opt_text = getattr(opt, "text", None)
+
+                    if opt_id is not None:
+                        selected_ids.append(str(opt_id))
+
+                    selected.append(
+                        {
+                            "option_id": str(opt_id)
+                            if opt_id is not None
+                            else None,
+                            "option_text": opt_text,
+                        }
+                    )
+
+                answers_payload.append(
+                    {
+                        "question_id": str(ans.question_id),
+                        "question_title": question_title,
+                        "is_correct": bool(ans.is_correct),
+                        "selected_option_ids": selected_ids,
+                        "selected_options": selected,
+                    }
+                )
+
+            out_attempts.append(
+                {
+                    "attempt_id": str(att.id),
+                    "created_at": self._dt_to_iso_z(att.created_at),
+                    "user_id": int(att.user_id),
+                    "company_id": str(att.company_id),
+                    "quiz_id": str(att.quiz_id),
+                    "total_questions": int(att.total_questions),
+                    "correct_answers": int(att.correct_answers),
+                    "answers": answers_payload,
+                }
+            )
+
+        return {
+            "company_id": str(company_id),
+            "filter": {
+                "user_id": user_id,
+                "quiz_id": str(quiz_id) if quiz_id is not None else None,
+            },
+            "attempts": out_attempts,
+        }
+
+    def _build_db_export_csv(self, attempts: list["QuizAttempt"]) -> str:
+        import csv
+        import io
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        writer.writerow(
+            [
+                "attempt_id",
+                "attempt_created_at",
+                "user_id",
+                "company_id",
+                "quiz_id",
+                "total_questions",
+                "correct_answers",
+                "question_id",
+                "question_title",
+                "is_correct",
+                "selected_option_ids",
+                "selected_option_texts",
+            ]
+        )
+
+        for att in attempts:
+            att_created = self._dt_to_iso_z(att.created_at) or ""
+            for ans in getattr(att, "answers", []) or []:
+                question = getattr(ans, "question", None)
+                question_title = getattr(question, "title", "") or ""
+
+                selected_ids: list[str] = []
+                selected_texts: list[str] = []
+
+                for sel in getattr(ans, "selected_options", []) or []:
+                    opt = getattr(sel, "option", None)
+                    opt_id = (getattr(sel, "option_id", None)
+                              or getattr(opt, "id", None))
+                    opt_text = getattr(opt, "text", None)
+
+                    if opt_id is not None:
+                        selected_ids.append(str(opt_id))
+                    if opt_text:
+                        selected_texts.append(str(opt_text))
+
+                writer.writerow(
+                    [
+                        str(att.id),
+                        att_created,
+                        str(att.user_id),
+                        str(att.company_id),
+                        str(att.quiz_id),
+                        str(att.total_questions),
+                        str(att.correct_answers),
+                        str(ans.question_id),
+                        question_title,
+                        "true" if ans.is_correct else "false",
+                        "|".join(selected_ids),
+                        "|".join(selected_texts),
+                    ]
+                )
+
+        return output.getvalue()
+
+    async def _ensure_quiz_belongs_to_company_or_404(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        quiz_id: UUID,
+    ) -> None:
+        quiz = await self.quiz_repo.get_full_by_id(db, quiz_id)
+        if quiz is None or quiz.company_id != company_id:
+            raise NotFound("Quiz not found")
+
+    async def export_my_attempts_for_company_db(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        format: Literal["json", "csv"] = "json",
+        quiz_id: UUID | None = None,
+    ):
+        company = await self._get_company_or_404(db, company_id)
+
+        if quiz_id is not None:
+            await self._ensure_quiz_belongs_to_company_or_404(
+                db,
+                company_id=company.id,
+                quiz_id=quiz_id,
+            )
+
+        attempts_seq = await (
+            self.quiz_attempt_repo.get_full_attempts_for_user_in_company(
+                db,
+                user_id=current_user.id,
+                company_id=company.id,
+                quiz_id=quiz_id,
+            ))
+        attempts = list(attempts_seq)
+
+        if format == "csv":
+            return self._build_db_export_csv(attempts)
+
+        payload = self._build_db_export_json(
+            company_id=company.id,
+            attempts=attempts,
+            user_id=current_user.id,
+            quiz_id=quiz_id,
+        )
+        return payload
+
+    async def export_company_attempts_db(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        format: Literal["json", "csv"] = "json",
+        quiz_id: UUID | None = None,
+    ):
+        company = await self._get_company_or_404(db, company_id)
+
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        if quiz_id is not None:
+            await self._ensure_quiz_belongs_to_company_or_404(
+                db,
+                company_id=company.id,
+                quiz_id=quiz_id,
+            )
+
+        attempts_seq = await (
+            self.quiz_attempt_repo.get_full_attempts_for_company(
+                db,
+                company_id=company.id,
+                quiz_id=quiz_id,
+            ))
+        attempts = list(attempts_seq)
+
+        if format == "csv":
+            return self._build_db_export_csv(attempts)
+
+        payload = self._build_db_export_json(
+            company_id=company.id,
+            attempts=attempts,
+            user_id=None,
+            quiz_id=quiz_id,
+        )
+        return payload
+
+    async def export_user_attempts_for_company_db(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        current_user: Any,
+        target_user_id: int,
+        format: Literal["json", "csv"] = "json",
+        quiz_id: UUID | None = None,
+    ):
+        company = await self._get_company_or_404(db, company_id)
+
+        await self._ensure_is_company_admin(
+            db,
+            company=company,
+            current_user=current_user,
+        )
+
+        if quiz_id is not None:
+            await self._ensure_quiz_belongs_to_company_or_404(
+                db,
+                company_id=company.id,
+                quiz_id=quiz_id,
+            )
+
+        attempts_seq = await (
+            self.quiz_attempt_repo.get_full_attempts_for_company_user(
+                db,
+                company_id=company.id,
+                user_id=target_user_id,
+                quiz_id=quiz_id,
+            ))
+        attempts = list(attempts_seq)
+
+        if format == "csv":
+            return self._build_db_export_csv(attempts)
+
+        payload = self._build_db_export_json(
+            company_id=company.id,
+            attempts=attempts,
+            user_id=target_user_id,
+            quiz_id=quiz_id,
+        )
+        return payload
+
     async def get_user_quiz_average_scores(
         self,
         db: AsyncSession,
@@ -923,7 +1208,12 @@ class QuizService:
 
         items: list[UserQuizAverageInRange] = []
 
-        for quiz_id, company_id_row, total_questions, total_correct, attempts_count in rows:
+        for (quiz_id,
+             company_id_row,
+             total_questions,
+             total_correct,
+             attempts_count
+             ) in rows:
             if total_questions > 0:
                 average = total_correct / total_questions
             else:
@@ -1044,17 +1334,24 @@ class QuizService:
             current_user=current_user,
         )
 
-        rows = await self.quiz_attempt_repo.get_company_user_quiz_weekly_aggregates(
-            db,
-            company_id=company.id,
-            user_id=target_user_id,
-            start=start,
-            end=end,
+        rows = await (
+            self.quiz_attempt_repo.get_company_user_quiz_weekly_aggregates(
+                db,
+                company_id=company.id,
+                user_id=target_user_id,
+                start=start,
+                end=end,
+            )
         )
 
         items: list[CompanyUserQuizWeeklyItem] = []
 
-        for quiz_id, week_start, total_questions, total_correct, attempts_count in rows:
+        for (quiz_id,
+             week_start,
+             total_questions,
+             total_correct,
+             attempts_count
+             ) in rows:
             if total_questions > 0:
                 average = total_correct / total_questions
             else:
@@ -1145,7 +1442,12 @@ class QuizService:
 
         items: list[MyQuizWeeklyItem] = []
 
-        for quiz_id, week_start, total_q, total_correct, attempts_count in rows:
+        for (quiz_id,
+             week_start,
+             total_q,
+             total_correct,
+             attempts_count
+             ) in rows:
             average = (total_correct / total_q) if total_q > 0 else 0.0
 
             items.append(
