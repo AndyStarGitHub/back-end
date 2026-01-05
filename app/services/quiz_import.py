@@ -1,93 +1,29 @@
 from __future__ import annotations
 
 import io
-import re
-from dataclasses import dataclass
 from typing import Any
-from uuid import UUID
 
 from openpyxl import load_workbook
 
 from app.schemas.quiz import (
     QuizCreate,
     QuizQuestionCreate,
-    QuizAnswerOptionCreate,
-    QuizFrequency
+    QuizAnswerOptionCreate
 )
 
+from app.utils.quiz_import import (
+    canon_header,
+    norm_text,
+    parse_bool,
+    parse_uuid,
+    parse_frequency,
+)
 
-def _canon_header(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", (s or "").strip().lower())
-
-
-def _norm(s: str) -> str:
-    return " ".join((s or "").strip().lower().split())
-
-
-def _parse_bool(v: Any) -> bool:
-    if isinstance(v, bool):
-        return v
-    if v is None:
-        raise ValueError("is_correct is required")
-
-    if isinstance(v, (int, float)):
-        if v == 1:
-            return True
-        if v == 0:
-            return False
-
-    s = str(v).strip().lower()
-    if s in {"true", "t", "1", "yes", "y", "+", "correct"}:
-        return True
-    if s in {"false", "f", "0", "no", "n", "-", "wrong"}:
-        return False
-
-    raise ValueError(f"Invalid boolean value: {v!r}")
-
-
-def _parse_uuid(v: Any) -> UUID | None:
-    if v is None or str(v).strip() == "":
-        return None
-    try:
-        return UUID(str(v).strip())
-    except Exception:
-        raise ValueError(f"Invalid UUID: {v!r}")
-
-
-def _parse_frequency(v: Any) -> QuizFrequency:
-    if v is None or str(v).strip() == "":
-        return QuizFrequency.monthly
-
-    s = str(v).strip().lower()
-    allowed = {e.value: e for e in QuizFrequency}
-    if s not in allowed:
-        raise ValueError(f"Invalid quiz_frequency: {v!r}")
-    return allowed[s]
-
-
-@dataclass
-class ImportErrorItem:
-    row: int
-    field: str
-    message: str
-
-
-@dataclass
-class ParsedQuizItem:
-    quiz_id: UUID | None
-    title: str
-    description: str | None
-    frequency: QuizFrequency
-    quiz_title_norm: str
-    quiz_create: QuizCreate
-    first_row: int
-
-
-@dataclass
-class ParsedImportResult:
-    items: list[ParsedQuizItem]
-    errors: list[ImportErrorItem]
-    total_quizzes_in_file: int
+from app.schemas.quiz_import import (
+    ImportErrorItem,
+    ParsedQuizItem,
+    ParsedImportResult,
+)
 
 
 EXPECTED_COLS = {
@@ -141,7 +77,7 @@ def parse_quizzes_from_excel(
     for idx, col in enumerate(header):
         if col is None:
             continue
-        name = _canon_header(str(col))
+        name = canon_header(str(col))
         col_map[name] = idx
 
     missing = [c for c in EXPECTED_COLS if c not in col_map]
@@ -174,7 +110,7 @@ def parse_quizzes_from_excel(
             continue
 
         try:
-            quiz_id = _parse_uuid(get_cell(row_vals, "quizid"))
+            quiz_id = parse_uuid(get_cell(row_vals, "quizid"))
         except Exception as e:
             errors.append(
                 ImportErrorItem(
@@ -202,7 +138,7 @@ def parse_quizzes_from_excel(
             else str(quiz_desc_val).strip() or None
 
         try:
-            frequency = _parse_frequency(get_cell(row_vals, "quizfrequency"))
+            frequency = parse_frequency(get_cell(row_vals, "quizfrequency"))
         except Exception as e:
             errors.append(
                 ImportErrorItem(
@@ -236,7 +172,7 @@ def parse_quizzes_from_excel(
             continue
 
         try:
-            is_correct = _parse_bool(get_cell(row_vals, "iscorrect"))
+            is_correct = parse_bool(get_cell(row_vals, "iscorrect"))
         except Exception as e:
             errors.append(
                 ImportErrorItem(
@@ -248,9 +184,9 @@ def parse_quizzes_from_excel(
 
             continue
 
-        quiz_title_norm = _norm(quiz_title)
-        question_title_norm = _norm(question_title)
-        option_text_norm = _norm(option_text)
+        quiz_title_norm = norm_text(quiz_title)
+        question_title_norm = norm_text(question_title)
+        option_text_norm = norm_text(option_text)
 
         if quiz_id is not None:
             quiz_key = f"id:{str(quiz_id)}"
