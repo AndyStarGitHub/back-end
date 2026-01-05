@@ -1,5 +1,5 @@
 from typing import Literal
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ router = APIRouter(
 
 from fastapi import Response
 from fastapi.responses import JSONResponse
+
 
 def _build_export_http_response(
     *,
@@ -121,3 +122,23 @@ async def export_company_quiz_attempts(
         result=result,
         filename=filename,
     )
+
+
+@router.post("/import")
+async def import_quizzes_from_excel(
+    company_id: UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    quiz_service: QuizService = Depends(get_quiz_service),
+):
+    file_bytes = await file.read()
+
+    result = await quiz_service.import_quizzes_from_excel(
+        db,
+        company_id=company_id,
+        current_user=current_user,
+        file_bytes=file_bytes,
+    )
+
+    return result

@@ -17,6 +17,8 @@ class AppSettings(BaseSettings):
 
     CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["*"])
 
+    QUIZ_IMPORT_MAX_ROWS: int = 5000
+
     model_config = SettingsConfigDict(
         env_prefix="APP_",
         env_file=".env",

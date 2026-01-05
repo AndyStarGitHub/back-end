@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from .errors import (
-    AppError, NotAuthenticated, InvalidCredentials, TokenInvalid,
-    Forbidden, NotFound, Conflict
+    AppError,
+    NotAuthenticated,
+    InvalidCredentials,
+    TokenInvalid,
+    Forbidden,
+    NotFound,
+    Conflict,
+    UnprocessableEntity
 )
 
 
@@ -55,3 +61,12 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=400,
             content={"detail": str(exc) or "Bad request"}
         )
+
+    @app.exception_handler(UnprocessableEntity)
+    async def _422(_req, exc: UnprocessableEntity):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": exc.detail},
+        )
+
+
