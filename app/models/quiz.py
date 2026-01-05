@@ -3,7 +3,14 @@ from __future__ import annotations
 from enum import Enum
 from uuid import UUID
 
-from sqlalchemy import String, ForeignKey, Boolean, Enum as SqlEnum
+from sqlalchemy import (
+    String,
+    ForeignKey,
+    Boolean,
+    Enum as SqlEnum,
+    Index,
+    func
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base

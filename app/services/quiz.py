@@ -46,6 +46,9 @@ from app.schemas.quiz_analytics import (
 from app.repositories.quiz_redis import QuizRedisRepository
 from app.core.notification_ws_manager import notifications_ws_manager
 
+from sqlalchemy.exc import IntegrityError
+from app.core.errors import Conflict
+
 
 class QuizService:
     def __init__(
@@ -145,6 +148,24 @@ class QuizService:
         )
         if not member or member.role != CompanyMemberRoleEnum.ADMIN:
             raise Forbidden("Only company owner or admin can manage quizzes")
+
+    async def _ensure_is_company_member(
+            self,
+            db: AsyncSession,
+            *,
+            company: Company,
+            current_user: Any,
+    ) -> None:
+        if company.owner_id == current_user.id:
+            return
+
+        member = await self.company_member_repo.get_one_for_company_and_user(
+            db,
+            company_id=company.id,
+            user_id=current_user.id,
+        )
+        if not member:
+            raise Forbidden("Only company members can view quizzes")
 
     def _validate_questions(self, questions: list[QuizQuestionCreate]) -> None:
 
@@ -355,11 +376,28 @@ class QuizService:
 
         self._validate_questions(data.questions)
 
-        quiz = await self.quiz_repo.create_with_nested(
-            db,
-            company_id=company_id,
-            data=data,
-        )
+        try:
+            quiz = await self.quiz_repo.create_with_nested(
+                db,
+                company_id=company_id,
+                data=data,
+            )
+        except IntegrityError as e:
+            await db.rollback()
+            msg = str(getattr(e, "orig", e))
+
+            if "uq_quiz_questions_quiz_id_title_norm" in msg:
+                raise Conflict(
+                    "Question titles in a quiz must be unique (case-insensitive, trimmed)."
+                )
+            if "uq_quiz_answer_options_question_id_text_norm" in msg:
+                raise Conflict(
+                    "Answer options in a question must be unique (case-insensitive, trimmed)."
+                )
+
+            raise Conflict(
+                "Duplicate question title or duplicate answer option."
+            )
 
         await self._create_notifications_for_new_quiz(
             db,
@@ -380,7 +418,8 @@ class QuizService:
     ) -> QuizRead:
 
         company = await self._get_company_or_404(db, company_id)
-        await self._ensure_is_company_admin(
+
+        await self._ensure_is_company_member(
             db,
             company=company,
             current_user=current_user,
@@ -417,11 +456,28 @@ class QuizService:
         if data.questions is not None:
             self._validate_questions(data.questions)
 
-        quiz = await self.quiz_repo.update_with_nested(
-            db,
-            quiz=quiz,
-            data=data,
-        )
+        try:
+            quiz = await self.quiz_repo.update_with_nested(
+                db,
+                quiz=quiz,
+                data=data,
+            )
+        except IntegrityError as e:
+            await db.rollback()
+            msg = str(getattr(e, "orig", e))
+
+            if "uq_quiz_questions_quiz_id_title_norm" in msg:
+                raise Conflict(
+                    "Question titles in a quiz must be unique (case-insensitive, trimmed)."
+                )
+            if "uq_quiz_answer_options_question_id_text_norm" in msg:
+                raise Conflict(
+                    "Answer options in a question must be unique (case-insensitive, trimmed)."
+                )
+
+            raise Conflict(
+                "Duplicate question title or duplicate answer option."
+            )
 
         return QuizRead.model_validate(quiz)
 
@@ -458,7 +514,7 @@ class QuizService:
     ) -> QuizListResponse:
 
         company = await self._get_company_or_404(db, company_id)
-        await self._ensure_is_company_admin(
+        await self._ensure_is_company_member(
             db,
             company=company,
             current_user=current_user,

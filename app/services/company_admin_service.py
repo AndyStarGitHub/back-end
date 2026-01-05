@@ -1,4 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Sequence
 
 from app.core.errors import Forbidden, NotFound
 from app.models.company import Company
@@ -80,9 +81,6 @@ async def remove_admin(
         raise NotFound("Member not found")
 
     return updated_member
-
-
-from typing import Sequence
 
 
 async def list_admins(
