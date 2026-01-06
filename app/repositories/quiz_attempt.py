@@ -438,3 +438,92 @@ class QuizAttemptRepository(BaseRepository[QuizAttempt]):
 
         result = await db.execute(stmt)
         return result.all()
+
+    async def get_full_attempts_for_user_in_company(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        company_id: UUID,
+        quiz_id: UUID | None = None,
+    ) -> Sequence[QuizAttempt]:
+        conditions = [
+            QuizAttempt.company_id == company_id,
+            QuizAttempt.user_id == user_id,
+        ]
+        if quiz_id is not None:
+            conditions.append(QuizAttempt.quiz_id == quiz_id)
+
+        stmt = (
+            select(QuizAttempt)
+            .where(and_(*conditions))
+            .options(
+                selectinload(QuizAttempt.answers)
+                .selectinload(QuizAttemptAnswer.question),
+                selectinload(QuizAttempt.answers)
+                .selectinload(QuizAttemptAnswer.selected_options)
+                .selectinload(QuizAttemptAnswerOption.option),
+            )
+            .order_by(QuizAttempt.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    async def get_full_attempts_for_company(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        quiz_id: UUID | None = None,
+    ) -> Sequence[QuizAttempt]:
+        conditions = [QuizAttempt.company_id == company_id]
+        if quiz_id is not None:
+            conditions.append(QuizAttempt.quiz_id == quiz_id)
+
+        stmt = (
+            select(QuizAttempt)
+            .where(and_(*conditions))
+            .options(
+                selectinload(QuizAttempt.answers)
+                .selectinload(QuizAttemptAnswer.question),
+                selectinload(QuizAttempt.answers)
+                .selectinload(QuizAttemptAnswer.selected_options)
+                .selectinload(QuizAttemptAnswerOption.option),
+            )
+            .order_by(QuizAttempt.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    async def get_full_attempts_for_company_user(
+        self,
+        db: AsyncSession,
+        *,
+        company_id: UUID,
+        user_id: int,
+        quiz_id: UUID | None = None,
+    ) -> Sequence[QuizAttempt]:
+        conditions = [
+            QuizAttempt.company_id == company_id,
+            QuizAttempt.user_id == user_id,
+        ]
+        if quiz_id is not None:
+            conditions.append(QuizAttempt.quiz_id == quiz_id)
+
+        stmt = (
+            select(QuizAttempt)
+            .where(and_(*conditions))
+            .options(
+                selectinload(QuizAttempt.answers)
+                .selectinload(QuizAttemptAnswer.question),
+                selectinload(QuizAttempt.answers)
+                .selectinload(QuizAttemptAnswer.selected_options)
+                .selectinload(QuizAttemptAnswerOption.option),
+            )
+            .order_by(QuizAttempt.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.scalars().all()
