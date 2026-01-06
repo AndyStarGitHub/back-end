@@ -13,7 +13,7 @@ from app.services.quiz import QuizService
 from app.schemas.quiz import UserQuizStats
 from app.schemas.quiz_analytics import (
     UserQuizAverageList,
-    UserQuizLastAttemptList,
+    UserQuizLastAttemptList, MyQuizWeeklyStats,
 )
 
 router = APIRouter()
@@ -63,4 +63,20 @@ async def get_my_quiz_last_attempts(
         db,
         current_user=current_user,
         company_id=company_id,
+    )
+
+
+@router.get("/weekly", response_model=MyQuizWeeklyStats)
+async def get_my_quiz_weekly(
+    start: datetime | None = None,
+    end: datetime | None = None,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+    quiz_service: QuizService = Depends(get_quiz_service),
+):
+    return await quiz_service.get_my_quiz_weekly_stats(
+        db,
+        current_user=current_user,
+        start=start,
+        end=end,
     )

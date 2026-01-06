@@ -69,3 +69,34 @@ class CompanyUserLastAttempt(BaseModel):
 class CompanyUsersLastAttemptList(BaseModel):
     company_id: UUID
     items: list[CompanyUserLastAttempt]
+
+
+class GlobalRatingStats(BaseModel):
+    average_score: float
+    total_questions: int
+    total_correct_answers: int
+    attempts_count: int
+
+
+class MyQuizWeeklyItem(BaseModel):
+    quiz_id: UUID
+    week_start: datetime
+    average_score: float
+    total_questions: int
+    total_correct_answers: int
+    attempts_count: int
+
+
+class MyQuizWeeklyStats(BaseModel):
+    user_id: int
+    items: list[MyQuizWeeklyItem]
+
+
+class CompanyQuizLastAttemptItem(BaseModel):
+    quiz_id: UUID
+    last_attempt_at: datetime | None = None
+
+
+class CompanyQuizLastAttemptList(BaseModel):
+    company_id: UUID
+    items: list[CompanyQuizLastAttemptItem]
