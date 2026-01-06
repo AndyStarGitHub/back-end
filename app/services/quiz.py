@@ -56,10 +56,9 @@ from sqlalchemy.exc import IntegrityError
 from app.core.errors import Conflict
 from app.services.quiz_import import (
     parse_quizzes_from_excel,
-    ImportErrorItem,
 )
 
-from app.core.config.app import AppSettings
+from app.schemas.notification import NotificationRead
 
 
 def _norm_title(s: str) -> str:
@@ -112,7 +111,7 @@ class QuizService:
         message_text = f"New quiz in the company {company.name}: {quiz.title}"
 
         for uid in user_ids:
-            await self.notification_repo.create_one(
+            n = await self.notification_repo.create_one(
                 db,
                 user_id=uid,
                 message=message_text,
@@ -121,20 +120,16 @@ class QuizService:
                 status=NotificationStatusEnum.UNREAD,
             )
 
-        for uid in user_ids:
             try:
+                payload = NotificationRead.model_validate(n).model_dump(mode="json")
                 await notifications_ws_manager.send_to_user(
                     uid,
-                    {
-                        "type": "quiz_created",
-                        "company_id": str(company.id),
-                        "quiz_id": str(quiz.id),
-                        "title": quiz.title,
-                        "message": message_text,
-                    },
+                    {"type": "notification", "payload": payload},
                 )
-            except Exception:
-                pass
+            # except Exception:
+            #     pass
+            except Exception as e:
+                print("WS send failed:", repr(e))
 
     async def _get_company_or_404(
         self,
